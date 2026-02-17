@@ -264,6 +264,18 @@ All new logic with decision paths should have tests. The visa filter is a good e
 
 ---
 
+## Uninstall
+
+One command removes everything — the app, its data, the browser engine, the Launch Agent, and any Keychain entries:
+
+```bash
+./uninstall.sh
+```
+
+It will ask for confirmation twice (once before cleaning system files, once before deleting the project folder) and tell you exactly what it removes at each step.
+
+---
+
 ## Privacy
 
 - All CV data, job data, and application history stays on your machine in `data/`
