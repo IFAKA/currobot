@@ -1,0 +1,46 @@
+# Core
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.12
+
+# Database
+sqlalchemy==2.0.36
+alembic==1.14.0
+aiosqlite==0.20.0
+
+# HTTP / scraping
+httpx==0.28.1
+beautifulsoup4==4.12.3
+lxml==5.3.0
+patchright==1.49.0
+playwright==1.49.0
+
+# AI / Ollama
+ollama==0.4.4
+langdetect==1.0.9
+
+# PDF
+pdfplumber==0.11.4
+reportlab==4.2.5
+weasyprint==63.0
+
+# Scheduling
+apscheduler==3.10.4
+
+# Security / credentials
+keyring==25.5.0
+
+# Notifications
+plyer==2.1.0
+
+# Logging
+structlog==24.4.0
+
+# Utilities
+python-dotenv==1.0.1
+psutil==6.1.0
+pydantic==2.10.3
+pydantic-settings==2.6.1
+python-jose[cryptography]==3.3.0
+tenacity==9.0.0
+aiofiles==24.1.0

@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Environment & secrets
+.env
+*.env
+
+# Database & generated data
+data/
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log

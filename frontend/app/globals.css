@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+:root {
+  --accent: #007AFF;
+  --success: #34C759;
+  --danger: #FF3B30;
+  --secondary: #8E8E93;
+}
+
+* { box-sizing: border-box; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
