@@ -6,6 +6,7 @@ import {
   ChevronDown, Filter
 } from "lucide-react"
 import { api } from "@/lib/api"
+import { toast } from "@/lib/toast"
 import type { Job } from "@/lib/types"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -13,7 +14,7 @@ import { StatusBadge, ProfilePill } from "@/components/ui/badge"
 import { formatDate, cvProfileColor, cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 
-const SITES = ["", "infojobs", "linkedin", "indeed", "trabajos", "jobtoday"]
+const SITES    = ["", "infojobs", "linkedin", "indeed", "trabajos", "jobtoday"]
 const STATUSES = ["", "scraped", "qualified", "cv_generating", "cv_ready", "applied", "rejected"]
 const PROFILES = ["", "cashier", "stocker", "logistics", "frontend_dev", "fullstack_dev"]
 
@@ -63,7 +64,6 @@ function JobRow({
         onClick={onFocus}
       >
         <div className="flex items-start gap-4">
-          {/* LEFT: cv_profile chip, company, title, location */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
               {job.cv_profile && (
@@ -85,13 +85,11 @@ function JobRow({
             )}
           </div>
 
-          {/* MIDDLE: site, posted_at */}
           <div className="hidden sm:flex flex-col items-center gap-1 shrink-0 text-center min-w-[80px]">
             <span className="text-xs text-[#8E8E93] font-medium">{job.site}</span>
             <span className="text-[11px] text-[#8E8E93]">{formatDate(job.posted_at ?? job.scraped_at)}</span>
           </div>
 
-          {/* RIGHT: StatusBadge, salary_raw, Apply button */}
           <div className="flex flex-col items-end gap-2 shrink-0">
             <StatusBadge status={job.status} />
             {job.salary_raw && (
@@ -153,15 +151,20 @@ export default function JobsPage() {
   const [focusedIndex, setFocusedIndex] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
 
-  const [filters, setFilters] = useState({
-    site: "",
-    status: "",
-    cv_profile: "",
-    search: "",
-  })
+  const [filters, setFilters] = useState({ site: "", status: "", cv_profile: "" })
+  const [searchInput, setSearchInput] = useState("")  // raw input — instant
+  const [searchQuery, setSearchQuery] = useState("")  // debounced — triggers fetch
 
   const filterRef = useRef(filters)
   filterRef.current = filters
+  const searchQueryRef = useRef(searchQuery)
+  searchQueryRef.current = searchQuery
+
+  // Debounce search input → searchQuery (300ms)
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(searchInput), 300)
+    return () => clearTimeout(t)
+  }, [searchInput])
 
   const fetchJobs = useCallback(async (reset = false) => {
     if (reset) setLoading(true)
@@ -171,15 +174,19 @@ export default function JobsPage() {
         site: f.site || undefined,
         status: f.status || undefined,
         cv_profile: f.cv_profile || undefined,
+        search: searchQueryRef.current || undefined,
         limit: 20,
       })
       if (reset) {
         setJobs(res.items)
+        setFocusedIndex(0)
       } else {
         setJobs(prev => [...prev, ...res.items])
       }
       setHasMore(res.next_cursor !== null)
       setCursor(res.next_cursor ?? undefined)
+    } catch {
+      toast.error("Failed to load jobs")
     } finally {
       setLoading(false)
       setLoadingMore(false)
@@ -188,7 +195,7 @@ export default function JobsPage() {
 
   useEffect(() => {
     fetchJobs(true)
-  }, [filters, fetchJobs])
+  }, [filters, searchQuery, fetchJobs])
 
   const loadMore = async () => {
     if (!hasMore || loadingMore) return
@@ -200,45 +207,41 @@ export default function JobsPage() {
         site: f.site || undefined,
         status: f.status || undefined,
         cv_profile: f.cv_profile || undefined,
+        search: searchQueryRef.current || undefined,
         limit: 20,
       })
       setJobs(prev => [...prev, ...res.items])
       setHasMore(res.next_cursor !== null)
       setCursor(res.next_cursor ?? undefined)
+    } catch {
+      toast.error("Failed to load more jobs")
     } finally {
       setLoadingMore(false)
     }
   }
 
-  // Fetch total count
   useEffect(() => {
     api.getJobCounts().then(c => {
       setTotalCount(Object.values(c).reduce((a, b) => a + b, 0))
     }).catch(() => {})
   }, [])
 
-  // J/K keyboard navigation
+  // J/K keyboard navigation — ref avoids stale closure
+  const jobsLengthRef = useRef(jobs.length)
+  jobsLengthRef.current = jobs.length
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName
       if (tag === "INPUT" || tag === "TEXTAREA") return
-      if (e.key === "j") setFocusedIndex(i => Math.min(i + 1, filteredJobs.length - 1))
+      if (e.key === "j") setFocusedIndex(i => Math.min(i + 1, jobsLengthRef.current - 1))
       if (e.key === "k") setFocusedIndex(i => Math.max(i - 1, 0))
     }
     document.addEventListener("keydown", handler)
     return () => document.removeEventListener("keydown", handler)
-  }, [jobs.length])
-
-  const filteredJobs = filters.search
-    ? jobs.filter(j =>
-        j.title.toLowerCase().includes(filters.search.toLowerCase()) ||
-        j.company.toLowerCase().includes(filters.search.toLowerCase())
-      )
-    : jobs
+  }, [])
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Jobs</h1>
@@ -250,19 +253,17 @@ export default function JobsPage() {
       <div className="bg-white/5 border border-white/10 rounded-2xl p-3 flex flex-wrap gap-2 items-center">
         <Filter className="h-4 w-4 text-[#8E8E93] shrink-0" />
 
-        {/* Search */}
         <div className="flex items-center gap-1.5 flex-1 min-w-48 bg-white/5 rounded-xl px-3 py-1.5">
           <Search className="h-3.5 w-3.5 text-[#8E8E93]" />
           <input
             type="text"
             placeholder="Search title or company..."
-            value={filters.search}
-            onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
             className="flex-1 bg-transparent text-sm text-white placeholder:text-[#8E8E93] outline-none"
           />
         </div>
 
-        {/* Site dropdown */}
         <div className="relative">
           <select
             value={filters.site}
@@ -277,7 +278,6 @@ export default function JobsPage() {
           <ChevronDown className="h-3 w-3 text-[#8E8E93] absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
 
-        {/* Profile dropdown */}
         <div className="relative">
           <select
             value={filters.cv_profile}
@@ -292,7 +292,6 @@ export default function JobsPage() {
           <ChevronDown className="h-3 w-3 text-[#8E8E93] absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
 
-        {/* Status dropdown */}
         <div className="relative">
           <select
             value={filters.status}
@@ -309,26 +308,27 @@ export default function JobsPage() {
       </div>
 
       <p className="text-xs text-[#8E8E93] px-1">
-        J / K to navigate · Enter to expand · {filteredJobs.length} results shown
+        J / K to navigate · {jobs.length} results shown
       </p>
 
-      {/* Job List */}
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => <JobSkeleton key={i} />)}
         </div>
-      ) : filteredJobs.length === 0 ? (
+      ) : jobs.length === 0 ? (
         <div className="text-center py-20">
           <Briefcase className="h-10 w-10 text-[#8E8E93] mx-auto mb-3" />
           <p className="text-[#8E8E93]">No jobs found.</p>
           <p className="text-xs text-[#8E8E93] mt-1">
-            Trigger a scrape from the dashboard to populate jobs.
+            {searchInput
+              ? "Try a different search term."
+              : "Trigger a scrape from the dashboard to populate jobs."}
           </p>
         </div>
       ) : (
         <div className="space-y-2">
           <AnimatePresence mode="popLayout">
-            {filteredJobs.map((job, i) => (
+            {jobs.map((job, i) => (
               <JobRow
                 key={job.id}
                 job={job}
@@ -340,7 +340,6 @@ export default function JobsPage() {
         </div>
       )}
 
-      {/* Load More */}
       {hasMore && !loading && (
         <div className="flex justify-center pt-2">
           <Button

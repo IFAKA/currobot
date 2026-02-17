@@ -187,10 +187,11 @@ async def get_jobs(
     site: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     cv_profile: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     jobs, next_cursor = await list_jobs(
-        db, cursor=cursor, limit=limit, site=site, status=status, cv_profile=cv_profile
+        db, cursor=cursor, limit=limit, site=site, status=status, cv_profile=cv_profile, search=search
     )
     return {
         "items": [_serialize_job(j) for j in jobs],

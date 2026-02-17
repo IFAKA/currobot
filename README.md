@@ -1,4 +1,4 @@
-# JobBot
+# currobot
 
 Local-first job application automation for the Spanish job market. Runs as a desktop app on macOS and Windows.
 
@@ -20,24 +20,24 @@ Scrapes 14+ job boards, adapts your CV for each role using a local AI model, and
 
 Download the latest release for your platform from the [Releases page](../../releases):
 
-- **macOS** — `.dmg` → drag JobBot to Applications
+- **macOS** — `.dmg` → drag currobot to Applications
 - **Windows** — `.msi` → run the installer
 
 **Before launching, install Ollama** (the local AI runtime):
-Download from [ollama.ai](https://ollama.ai) and run it. JobBot uses it to adapt your CV locally — no data leaves your device.
+Download from [ollama.ai](https://ollama.ai) and run it. currobot uses it to adapt your CV locally — no data leaves your device.
 
 ---
 
 ## First launch
 
-The first time you open JobBot, a **setup wizard** guides you through:
+The first time you open currobot, a **setup wizard** guides you through:
 
 1. System check (Ollama running, enough disk space)
 2. RAM check + AI model recommendation
 3. Download the Ollama model (one-time, ~4 GB)
 4. Upload your master CV as a PDF
 5. Accept the terms
-6. Choose whether to start JobBot on login
+6. Choose whether to start currobot on login
 
 After that you're in the dashboard. The Python backend and scrapers run automatically in the background.
 
@@ -45,7 +45,7 @@ After that you're in the dashboard. The Python backend and scrapers run automati
 
 ## Daily use
 
-JobBot lives in the **system tray**. Close the window and it keeps running. Click the tray icon to reopen.
+currobot lives in the **system tray**. Close the window and it keeps running. Click the tray icon to reopen.
 
 | Page | What it does |
 |---|---|
@@ -57,34 +57,34 @@ JobBot lives in the **system tray**. Close the window and it keeps running. Clic
 | Settings | Ollama model, retention, company sources, start-on-login toggle |
 
 **Tray menu:**
-- **Open JobBot** — bring the window to front
+- **Open currobot** — bring the window to front
 - **Start on Login** — toggle autolaunch (checkmark = enabled)
-- **Uninstall JobBot…** — disables autolaunch then quits; then delete the app manually
+- **Uninstall currobot…** — disables autolaunch then quits; then delete the app manually
 
 ---
 
 ## Uninstall
 
 **Step 1 — disable autolaunch** (skip if you never enabled it):
-Right-click the tray icon → **Uninstall JobBot…** — this disables the login item and quits the app.
+Right-click the tray icon → **Uninstall currobot…** — this disables the login item and quits the app.
 
 **Step 2 — remove the app:**
-- macOS: move `JobBot.app` from Applications to Trash
-- Windows: Settings → Add or Remove Programs → JobBot → Uninstall
+- macOS: move `currobot.app` from Applications to Trash
+- Windows: Settings → Add or Remove Programs → currobot → Uninstall
 
 **Step 3 — remove app data (optional):**
-- macOS: `~/Library/Application Support/com.jobbot.app/`
-- Windows: `%APPDATA%\com.jobbot.app\`
+- macOS: `~/Library/Application Support/com.currobot.app/`
+- Windows: `%APPDATA%\com.currobot.app\`
 
 **Step 4 — remove Keychain entries (optional):**
-- macOS: open Keychain Access, search "jobbot", delete matching entries
-- Windows: open Credential Manager, remove "jobbot" entries
+- macOS: open Keychain Access, search "currobot", delete matching entries
+- Windows: open Credential Manager, remove "currobot" entries
 
 ---
 
 ## What the filters do
 
-JobBot automatically skips jobs that explicitly disqualify for the Spanish student→work permit *canje* (Reglamento de Extranjería 2025):
+currobot automatically skips jobs that explicitly disqualify for the Spanish student→work permit *canje* (Reglamento de Extranjería 2025):
 
 | Disqualifier | Example |
 |---|---|

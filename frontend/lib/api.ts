@@ -21,13 +21,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   getHealth: () => request<SystemHealth>("/api/health"),
-  getJobs: (params?: { cursor?: number; limit?: number; site?: string; status?: string; cv_profile?: string }) => {
+  getJobs: (params?: { cursor?: number; limit?: number; site?: string; status?: string; cv_profile?: string; search?: string }) => {
     const q = new URLSearchParams()
     if (params?.cursor) q.set("cursor", String(params.cursor))
     if (params?.limit) q.set("limit", String(params.limit))
     if (params?.site) q.set("site", params.site)
     if (params?.status) q.set("status", params.status)
     if (params?.cv_profile) q.set("cv_profile", params.cv_profile)
+    if (params?.search) q.set("search", params.search)
     return request<PaginatedResponse<Job>>(`/api/jobs?${q}`)
   },
   getJobCounts: () => request<Record<string, number>>("/api/jobs/counts"),

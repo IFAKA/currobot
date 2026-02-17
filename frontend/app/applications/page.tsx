@@ -7,6 +7,7 @@ import { api, createSSEConnection } from "@/lib/api"
 import type { Application } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { formatDate, cvProfileColor, cn } from "@/lib/utils"
+import { toast } from "@/lib/toast"
 
 const COLUMNS: { status: string; label: string; accent: string }[] = [
   { status: "pending_human_review", label: "Pending Review",  accent: "border-amber-400/40" },
@@ -44,8 +45,6 @@ function AppCard({
     <motion.div
       layout
       layoutId={`app-${app.id}`}
-      drag
-      dragSnapToOrigin
       initial={{ opacity: 0, scale: 0.96 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.94 }}
@@ -124,18 +123,13 @@ function KanbanColumn({
   onReject: (id: number) => void
   onCardClick: (app: Application) => void
 }) {
-  const [isDragOver, setIsDragOver] = useState(false)
-
   return (
     <div
       className={cn(
         "flex flex-col min-w-[240px] max-w-[300px] flex-shrink-0",
-        "bg-white/[0.03] border rounded-2xl overflow-hidden transition-colors",
-        isDragOver ? "border-amber-400/60 bg-amber-400/5" : accent
+        "bg-white/[0.03] border rounded-2xl overflow-hidden",
+        accent
       )}
-      onDragOver={e => { e.preventDefault(); setIsDragOver(true) }}
-      onDragLeave={() => setIsDragOver(false)}
-      onDrop={() => setIsDragOver(false)}
     >
       {/* Column Header */}
       <div className="px-3 py-2.5 border-b border-white/5 flex items-center justify-between">
@@ -229,7 +223,7 @@ export default function ApplicationsPage() {
         prev.map(a => a.id === id ? { ...a, status: "rejected" as const } : a)
       )
     } catch {
-      // silent
+      toast.error("Failed to reject application")
     } finally {
       setActionInProgress(null)
     }

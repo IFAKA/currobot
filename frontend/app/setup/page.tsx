@@ -11,6 +11,7 @@ import { api } from "@/lib/api"
 import type { SetupStatus, SystemHealth } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { toast } from "@/lib/toast"
 
 const BASE = "http://localhost:8000"
 
@@ -103,7 +104,7 @@ function Step1({
       <div>
         <h2 className="text-xl font-bold text-white">System Check</h2>
         <p className="text-sm text-[#8E8E93] mt-1">
-          Verifying that your system meets all requirements for JobBot.
+          Verifying that your system meets all requirements for currobot.
         </p>
       </div>
 
@@ -456,15 +457,15 @@ function Step5({
       <div>
         <h2 className="text-xl font-bold text-white">Before You Start</h2>
         <p className="text-sm text-[#8E8E93] mt-1">
-          Please read and accept the terms before using JobBot.
+          Please read and accept the terms before using currobot.
         </p>
       </div>
 
       <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-xs text-[#8E8E93] space-y-3 max-h-64 overflow-y-auto">
-        <p className="font-semibold text-white">JobBot Terms of Service</p>
+        <p className="font-semibold text-white">currobot Terms of Service</p>
 
         <p>
-          JobBot is a personal automation tool. By using it, you acknowledge:
+          currobot is a personal automation tool. By using it, you acknowledge:
         </p>
 
         <ul className="space-y-2 list-none">
@@ -477,21 +478,21 @@ function Step5({
           <li className="flex items-start gap-2">
             <span className="text-[#007AFF] mt-0.5">•</span>
             <span>
-              Job applications submitted through JobBot are submitted on your behalf. You authorize each
+              Job applications submitted through currobot are submitted on your behalf. You authorize each
               submission individually.
             </span>
           </li>
           <li className="flex items-start gap-2">
             <span className="text-[#007AFF] mt-0.5">•</span>
             <span>
-              JobBot stores your CV and job data locally on this device. No data is sent to external
+              currobot stores your CV and job data locally on this device. No data is sent to external
               servers unless you configure a non-local Ollama endpoint.
             </span>
           </li>
           <li className="flex items-start gap-2">
             <span className="text-[#007AFF] mt-0.5">•</span>
             <span>
-              JobBot is provided as-is with no warranty. Use at your own discretion.
+              currobot is provided as-is with no warranty. Use at your own discretion.
             </span>
           </li>
           <li className="flex items-start gap-2">
@@ -536,7 +537,7 @@ function Step6({
       <div>
         <h2 className="text-xl font-bold text-white">Startup Preference</h2>
         <p className="text-sm text-[#8E8E93] mt-1">
-          Should JobBot start automatically when you log in?
+          Should currobot start automatically when you log in?
         </p>
       </div>
 
@@ -546,7 +547,7 @@ function Step6({
             <div>
               <p className="text-sm font-medium text-white">Start on login</p>
               <p className="text-xs text-[#8E8E93] mt-0.5">
-                JobBot will run in the tray when you log in
+                currobot will run in the tray when you log in
               </p>
             </div>
             <button
@@ -638,7 +639,7 @@ export default function SetupPage() {
         await api.acceptTos()
         setStep(6)
       } catch {
-        // silent
+        toast.error("Failed to accept terms — please try again")
       } finally {
         setCompleting(false)
       }
@@ -652,6 +653,7 @@ export default function SetupPage() {
         await api.completeSetup()
         router.push("/")
       } catch {
+        toast.error("Setup failed — please try again")
         setCompleting(false)
       }
     }
@@ -677,7 +679,7 @@ export default function SetupPage() {
           <div className="w-12 h-12 rounded-2xl bg-[#007AFF] flex items-center justify-center">
             <Bot className="h-6 w-6 text-white" />
           </div>
-          <h1 className="text-xl font-bold text-white">JobBot Setup</h1>
+          <h1 className="text-xl font-bold text-white">currobot Setup</h1>
           <p className="text-sm text-[#8E8E93]">Step {step} of {STEPS.length}</p>
         </div>
 

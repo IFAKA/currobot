@@ -7,14 +7,17 @@ import { Search, Zap, Eye, Settings, Briefcase, LayoutGrid } from "lucide-react"
 import { api } from "@/lib/api"
 import { playSound } from "@/lib/sounds"
 
-interface CommandPaletteProps {
-  scraperSites?: string[]
-}
-
-export function CommandPalette({ scraperSites = [] }: CommandPaletteProps) {
+export function CommandPalette() {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
+  const [scraperSites, setScraperSites] = useState<string[]>([])
   const router = useRouter()
+
+  useEffect(() => {
+    api.getScraperStatus()
+      .then(r => setScraperSites(r.scrapers.map(s => s.site)))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -82,10 +85,10 @@ export function CommandPalette({ scraperSites = [] }: CommandPaletteProps) {
                   <span className="text-[10px] text-[#8E8E93] uppercase tracking-wider px-2">Navigation</span>
                 }>
                   {[
-                    { label: "Dashboard", icon: <LayoutGrid className="h-3.5 w-3.5" />, path: "/" },
-                    { label: "Jobs", icon: <Briefcase className="h-3.5 w-3.5" />, path: "/jobs" },
-                    { label: "Applications", icon: <Eye className="h-3.5 w-3.5" />, path: "/applications" },
-                    { label: "Settings", icon: <Settings className="h-3.5 w-3.5" />, path: "/settings" },
+                    { label: "Dashboard",    icon: <LayoutGrid className="h-3.5 w-3.5" />, path: "/" },
+                    { label: "Jobs",         icon: <Briefcase  className="h-3.5 w-3.5" />, path: "/jobs" },
+                    { label: "Applications", icon: <Eye        className="h-3.5 w-3.5" />, path: "/applications" },
+                    { label: "Settings",     icon: <Settings   className="h-3.5 w-3.5" />, path: "/settings" },
                   ].map(cmd => (
                     <Command.Item
                       key={cmd.path}

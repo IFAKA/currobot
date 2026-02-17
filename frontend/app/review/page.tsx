@@ -10,6 +10,7 @@ import {
 import { api } from "@/lib/api"
 import type { Application } from "@/lib/types"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/lib/toast"
 import { StatusBadge, ProfilePill } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { formatDate, cn } from "@/lib/utils"
@@ -173,7 +174,7 @@ function ReviewContent() {
       setSuccessVisible(true)
       setTimeout(() => router.push("/applications"), 2000)
     } catch {
-      // silent
+      toast.error("Failed to authorize application")
     } finally {
       setAuthorizing(false)
     }
@@ -186,7 +187,7 @@ function ReviewContent() {
       await api.rejectApplication(app.id)
       router.push("/applications")
     } catch {
-      // silent
+      toast.error("Failed to reject application")
     } finally {
       setRejecting(false)
     }

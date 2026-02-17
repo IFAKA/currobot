@@ -73,6 +73,7 @@ async def list_jobs(
     site: Optional[str] = None,
     status: Optional[str] = None,
     cv_profile: Optional[str] = None,
+    search: Optional[str] = None,
 ) -> tuple[list[Job], Optional[int]]:
     q = select(Job).order_by(Job.id.desc())
     if cursor:
@@ -83,6 +84,9 @@ async def list_jobs(
         q = q.where(Job.status == status)
     if cv_profile:
         q = q.where(Job.cv_profile == cv_profile)
+    if search:
+        term = f"%{search}%"
+        q = q.where(Job.title.ilike(term) | Job.company.ilike(term))
     q = q.limit(limit + 1)
     result = await db.execute(q)
     rows = list(result.scalars().all())

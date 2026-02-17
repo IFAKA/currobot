@@ -1,20 +1,39 @@
 "use client"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { LayoutGrid, Briefcase, Kanban, FileText, Settings, Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { motion } from "motion/react"
+import { api, createSSEConnection } from "@/lib/api"
 
 const nav = [
-  { href: "/",             icon: LayoutGrid,   label: "Dashboard" },
-  { href: "/jobs",         icon: Briefcase,    label: "Jobs" },
-  { href: "/applications", icon: Kanban,       label: "Applications" },
-  { href: "/cv",           icon: FileText,     label: "CV Profiles" },
-  { href: "/settings",     icon: Settings,     label: "Settings" },
+  { href: "/",             icon: LayoutGrid, label: "Dashboard" },
+  { href: "/jobs",         icon: Briefcase,  label: "Jobs" },
+  { href: "/applications", icon: Kanban,     label: "Applications" },
+  { href: "/cv",           icon: FileText,   label: "CV Profiles" },
+  { href: "/settings",     icon: Settings,   label: "Settings" },
 ]
 
-export function Sidebar({ pendingCount = 0 }: { pendingCount?: number }) {
+export function Sidebar() {
   const pathname = usePathname()
+  const [pendingCount, setPendingCount] = useState(0)
+
+  useEffect(() => {
+    const load = () => {
+      api.getPendingReviews().then(r => setPendingCount(r.count)).catch(() => {})
+    }
+    load()
+    const close = createSSEConnection((event) => {
+      if (
+        event === "review_ready" ||
+        event === "application_authorized" ||
+        event === "application_rejected"
+      ) load()
+    })
+    return () => close()
+  }, [])
+
   return (
     <nav className="fixed left-0 top-0 h-full w-16 bg-[#1C1C1E] border-r border-white/5 flex flex-col items-center py-4 gap-1 z-40">
       <div className="mb-4">
