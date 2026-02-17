@@ -4,8 +4,9 @@ import { motion, AnimatePresence } from "motion/react"
 import { useRouter } from "next/navigation"
 import {
   CheckCircle2, XCircle, ChevronRight, ChevronLeft,
-  Cpu, HardDrive, Download, Upload, FileText, Bot, AlertTriangle
+  Cpu, HardDrive, Download, Upload, FileText, Bot, AlertTriangle, Power
 } from "lucide-react"
+import { invoke } from "@tauri-apps/api/core"
 import { api } from "@/lib/api"
 import type { SetupStatus, SystemHealth } from "@/lib/types"
 import { Button } from "@/components/ui/button"
@@ -19,6 +20,7 @@ const STEPS = [
   { id: 3, label: "Download",     icon: <Download className="h-4 w-4" /> },
   { id: 4, label: "Upload CV",    icon: <Upload className="h-4 w-4" /> },
   { id: 5, label: "Terms",        icon: <FileText className="h-4 w-4" /> },
+  { id: 6, label: "Startup",      icon: <Power className="h-4 w-4" /> },
 ]
 
 function StepIndicator({ current }: { current: number }) {
@@ -519,6 +521,62 @@ function Step5({
   )
 }
 
+// Step 6: Startup Preference
+function Step6({
+  autolaunchEnabled,
+  onToggle,
+  isTauriApp,
+}: {
+  autolaunchEnabled: boolean
+  onToggle: (v: boolean) => void
+  isTauriApp: boolean
+}) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-xl font-bold text-white">Startup Preference</h2>
+        <p className="text-sm text-[#8E8E93] mt-1">
+          Should JobBot start automatically when you log in?
+        </p>
+      </div>
+
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-4">
+        {isTauriApp ? (
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-white">Start on login</p>
+              <p className="text-xs text-[#8E8E93] mt-0.5">
+                JobBot will run in the tray when you log in
+              </p>
+            </div>
+            <button
+              onClick={() => onToggle(!autolaunchEnabled)}
+              className={cn(
+                "relative w-11 h-6 rounded-full transition-colors shrink-0",
+                autolaunchEnabled ? "bg-[#34C759]" : "bg-white/10"
+              )}
+            >
+              <motion.span
+                layout
+                className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm"
+                animate={{ x: autolaunchEnabled ? 20 : 0 }}
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              />
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-[#8E8E93]">
+            Autolaunch is configured via the tray icon in the desktop app.
+          </p>
+        )}
+        <p className="text-xs text-[#8E8E93]">
+          You can change this at any time from the tray menu.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function SetupPage() {
   const router = useRouter()
   const [step, setStep] = useState(1)
@@ -528,6 +586,12 @@ export default function SetupPage() {
   const [cvUploaded, setCvUploaded] = useState(false)
   const [tosAccepted, setTosAccepted] = useState(false)
   const [completing, setCompleting] = useState(false)
+  const [autolaunchEnabled, setAutolaunchEnabled] = useState(false)
+  const [isTauriApp, setIsTauriApp] = useState(false)
+
+  useEffect(() => {
+    setIsTauriApp("__TAURI_INTERNALS__" in window)
+  }, [])
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -560,6 +624,7 @@ export default function SetupPage() {
       case 3: return Boolean(setupStatus?.model_downloaded)
       case 4: return cvUploaded || Boolean(setupStatus?.cv_uploaded)
       case 5: return tosAccepted
+      case 6: return true
       default: return false
     }
   }
@@ -567,10 +632,23 @@ export default function SetupPage() {
   const handleNext = async () => {
     if (step < 5) {
       setStep(s => s + 1)
-    } else {
+    } else if (step === 5) {
       setCompleting(true)
       try {
         await api.acceptTos()
+        setStep(6)
+      } catch {
+        // silent
+      } finally {
+        setCompleting(false)
+      }
+    } else {
+      // step 6: apply autolaunch choice then complete
+      setCompleting(true)
+      try {
+        if (isTauriApp) {
+          try { await invoke("set_autolaunch", { enabled: autolaunchEnabled }) } catch { /* silent */ }
+        }
         await api.completeSetup()
         router.push("/")
       } catch {
@@ -632,6 +710,13 @@ export default function SetupPage() {
               {step === 3 && <Step3 setupStatus={setupStatus} onRefresh={refreshStatus} />}
               {step === 4 && <Step4 onUploaded={() => setCvUploaded(true)} />}
               {step === 5 && <Step5 accepted={tosAccepted} onAccept={setTosAccepted} />}
+              {step === 6 && (
+                <Step6
+                  autolaunchEnabled={autolaunchEnabled}
+                  onToggle={setAutolaunchEnabled}
+                  isTauriApp={isTauriApp}
+                />
+              )}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -653,7 +738,7 @@ export default function SetupPage() {
             loading={completing}
             size="lg"
           >
-            {step === 5 ? "Complete Setup" : "Next"}
+            {step === 6 ? "Complete Setup" : "Next"}
             {step < 5 && <ChevronRight className="h-4 w-4" />}
           </Button>
         </div>

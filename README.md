@@ -1,6 +1,6 @@
-# currobot
+# JobBot
 
-Local-first job application automation for the Spanish job market.
+Local-first job application automation for the Spanish job market. Runs as a desktop app on macOS and Windows.
 
 Scrapes 14+ job boards, adapts your CV for each role using a local AI model, and submits applications — but only after you approve each one. Nothing leaves your machine.
 
@@ -16,100 +16,75 @@ Scrapes 14+ job boards, adapts your CV for each role using a local AI model, and
 
 ---
 
-## For non-technical users
+## Install
 
-### What you need before starting
+Download the latest release for your platform from the [Releases page](../../releases):
 
-You need three things installed. All are free.
+- **macOS** — `.dmg` → drag JobBot to Applications
+- **Windows** — `.msi` → run the installer
 
-**1 — Python 3.11 or newer**
-
-Check if you already have it:
-```
-python3 --version
-```
-If it says `Python 3.11.x` or higher, you're good. If not, download it from [python.org/downloads](https://www.python.org/downloads/) and run the installer.
-
-**2 — Node.js**
-
-Check:
-```
-node --version
-```
-If it says `v20.x.x` or higher, you're good. If not, download from [nodejs.org](https://nodejs.org) — pick the **LTS** version.
-
-**3 — Ollama** (the local AI)
-
-Download from [ollama.ai](https://ollama.ai) and install it like any Mac app. This is what runs the AI on your machine so your CV data never leaves it.
+**Before launching, install Ollama** (the local AI runtime):
+Download from [ollama.ai](https://ollama.ai) and run it. JobBot uses it to adapt your CV locally — no data leaves your device.
 
 ---
 
-### Installation
+## First launch
 
-**Step 1 — Download currobot**
+The first time you open JobBot, a **setup wizard** guides you through:
 
-Click the green **Code** button at the top of this page → **Download ZIP** → unzip it somewhere you'll remember (e.g. your Desktop or Documents folder).
+1. System check (Ollama running, enough disk space)
+2. RAM check + AI model recommendation
+3. Download the Ollama model (one-time, ~4 GB)
+4. Upload your master CV as a PDF
+5. Accept the terms
+6. Choose whether to start JobBot on login
 
-Or if you know git:
-```
-git clone https://github.com/IFAKA/currobot.git
-cd currobot
-```
-
-**Step 2 — Start it**
-
-Open Terminal, navigate to the currobot folder, and run:
-```
-./start.sh
-```
-
-That's it. The script automatically:
-- Creates a Python environment
-- Installs all Python dependencies
-- Installs the browser automation engine
-- Installs frontend dependencies
-- Starts the backend and the dashboard
-
-**Step 3 — Open the dashboard**
-
-Go to [http://localhost:3000](http://localhost:3000) in your browser.
-
-The first time you open it, a **setup wizard** will guide you through:
-- Checking your system (Python, Node, Ollama)
-- Picking the right AI model for your RAM
-- Downloading the model (one time, ~4 GB)
-- Uploading your master CV as a PDF
-- Accepting the terms
-
-After that, you're in the dashboard. Scrapers run automatically in the background.
+After that you're in the dashboard. The Python backend and scrapers run automatically in the background.
 
 ---
 
-### Daily use
+## Daily use
 
-- **Dashboard** — system health, scraper status, application funnel
-- **Jobs** — browse scraped jobs, filter by site or profile
-- **Applications** — track everything from scraped to applied
-- **Review** — jobs waiting for your approval before submission. You have 30 minutes per review before it expires.
-- **CV** — manage your master CV
-- **Settings** — change Ollama model, delays, notifications
+JobBot lives in the **system tray**. Close the window and it keeps running. Click the tray icon to reopen.
 
-### Stopping currobot
+| Page | What it does |
+|---|---|
+| Dashboard | System health, scraper status, application funnel |
+| Jobs | Browse scraped jobs, filter by site or profile |
+| Applications | Kanban board — from scraped to applied |
+| Review | Approve pending applications before submission (30-min window) |
+| CV | Manage your master CV |
+| Settings | Ollama model, retention, company sources, start-on-login toggle |
 
-Press `Ctrl+C` in the Terminal window where you ran `./start.sh`.
-
-### Auto-start on login (optional)
-
-If you want currobot to start automatically when you log into your Mac:
-```
-./install_launchagent.sh
-```
+**Tray menu:**
+- **Open JobBot** — bring the window to front
+- **Start on Login** — toggle autolaunch (checkmark = enabled)
+- **Uninstall JobBot…** — disables autolaunch then quits; then delete the app manually
 
 ---
 
-### What the filters do
+## Uninstall
 
-currobot automatically skips jobs that explicitly disqualify for the Spanish student→work permit *canje* (Reglamento de Extranjería 2025):
+**Step 1 — disable autolaunch** (skip if you never enabled it):
+Right-click the tray icon → **Uninstall JobBot…** — this disables the login item and quits the app.
+
+**Step 2 — remove the app:**
+- macOS: move `JobBot.app` from Applications to Trash
+- Windows: Settings → Add or Remove Programs → JobBot → Uninstall
+
+**Step 3 — remove app data (optional):**
+- macOS: `~/Library/Application Support/com.jobbot.app/`
+- Windows: `%APPDATA%\com.jobbot.app\`
+
+**Step 4 — remove Keychain entries (optional):**
+- macOS: open Keychain Access, search "jobbot", delete matching entries
+- Windows: open Credential Manager, remove "jobbot" entries
+
+---
+
+## What the filters do
+
+JobBot automatically skips jobs that explicitly disqualify for the Spanish student→work permit *canje* (Reglamento de Extranjería 2025):
 
 | Disqualifier | Example |
 |---|---|
@@ -121,40 +96,27 @@ currobot automatically skips jobs that explicitly disqualify for the Spanish stu
 
 ---
 
-### Troubleshooting
-
-**"python3 not found"** → Install Python from [python.org/downloads](https://www.python.org/downloads/)
-
-**"node not found"** → Install Node.js LTS from [nodejs.org](https://nodejs.org)
-
-**"Ollama not detected"** → Open a new Terminal and run `ollama serve`, then try `./start.sh` again
-
-**Dashboard doesn't load** → Wait 10 seconds and refresh. The backend takes a moment on first start.
-
-**Scraper returns zero jobs repeatedly** → A scraper disables itself after 5 consecutive empty runs. The site may have changed its layout. Check the logs in `data/logs/`.
-
----
-
 ## For developers
 
 ### Tech stack
 
 | Layer | What |
 |---|---|
-| Backend | Python 3.11+, FastAPI, SQLAlchemy 2 (async), Alembic, aiosqlite |
+| Desktop shell | Tauri v2 (Rust) — tray, window, autolaunch, notifications |
+| Backend | Python 3.11+, FastAPI, SQLAlchemy 2 (async), aiosqlite |
 | Scraping | Patchright (stealth Playwright), BeautifulSoup4, httpx |
 | AI | Ollama (local LLM), custom 4-step CV adaptation pipeline |
 | PDF | pdfplumber (parse), reportlab + weasyprint (generate) |
 | Scheduling | APScheduler |
-| Frontend | Next.js 16, React 19, Tailwind CSS 4, Radix UI |
+| Frontend | Next.js 16 (static export), React 19, Tailwind CSS 4, Radix UI |
 | Real-time | Server-Sent Events (SSE) |
-| macOS | Keychain via `keyring`, Launch Agent, `plyer` notifications |
+| Credentials | `keyring` (macOS Keychain / Windows Credential Manager / Linux Secret Service) |
 | Tests | pytest |
 
 ### Project structure
 
 ```
-currobot/
+jobbot/
 ├── backend/
 │   ├── main.py                  # FastAPI app, all REST + SSE endpoints
 │   ├── config.py                # Central config, rate limits, data paths
@@ -180,32 +142,50 @@ currobot/
 │   │   ├── form_filler.py       # Fill fields with semantic mapping (ES/EN)
 │   │   ├── confirm_detector.py  # Detect confirmation screens post-submit
 │   │   └── human_loop.py        # Prepare review, auth flow, 30-min timeout
+│   ├── notifications/
+│   │   └── notifier.py          # In-memory notification queue (SSE → Tauri)
 │   └── documents/
 │       ├── cv_parser.py         # Parse PDF CV → canonical JSON
 │       └── cv_generator.py      # Canonical JSON → adapted PDF
 ├── frontend/
 │   ├── app/                     # Next.js App Router pages
 │   ├── components/              # Sidebar, CommandPalette, UI primitives
-│   └── lib/                    # API client, types, utilities
+│   ├── lib/                     # API client, types, utilities
+│   └── src-tauri/               # Tauri desktop shell (Rust)
+│       ├── src/lib.rs           # Tray, window, sidecar, autolaunch logic
+│       ├── tauri.conf.json      # App config, bundle settings
+│       └── capabilities/        # Tauri v2 permission definitions
 ├── tests/
 │   └── test_visa_filter.py      # 88 pytest cases for the visa filter
+├── backend.spec                 # PyInstaller spec (bundles backend into binary)
+├── Makefile                     # Build pipeline
 ├── requirements.txt
-├── start.sh                     # Single-command startup (handles venv + npm)
 └── .env.example                 # Config reference
 ```
 
-### Running locally
+### Running in development
 
 ```bash
-git clone https://github.com/IFAKA/currobot.git
-cd currobot
-./start.sh
+# Option 1 — backend + Next.js dev server (no native window)
+make dev
+
+# Option 2 — full Tauri desktop window
+make tauri-dev
 ```
+
+`make dev` requires Python 3.11+ and Node 20+ installed locally. Ollama must be running.
+
+### Building a distributable
+
+```bash
+make build
+```
+
+This runs PyInstaller to bundle the Python backend, then `tauri build` to produce the platform installer (`.dmg` on macOS, `.msi` on Windows).
 
 ### Running tests
 
 ```bash
-# From project root
 python3 -m pytest tests/ -v
 ```
 
@@ -223,56 +203,32 @@ The base class handles: deduplication, visa filter, rate limiting, consecutive-z
 ### Adding a CV profile
 
 1. Add the enum value to `CVProfile` in `backend/database/models.py`
-2. Add the profile config to `PROFILE_REFRAME` in `backend/ai/cv_adapter.py` — define `skills_emphasis`, `title_map`, and `role_context`
+2. Add the profile config to `PROFILE_REFRAME` in `backend/ai/cv_adapter.py`
 3. Run a database migration: `alembic revision --autogenerate -m "add profile"` + `alembic upgrade head`
 
 ### Configuration
 
-Copy `.env.example` to `.env` and edit as needed. The defaults work out of the box.
+Copy `.env.example` to `.env` and edit as needed:
 
 ```env
 OLLAMA_HOST=http://localhost:11434   # change if Ollama runs on another machine
 OLLAMA_MODEL=                        # leave empty for auto-selection by RAM
-SCRAPER_DEFAULT_DELAY_MIN=3.0        # seconds between requests
+SCRAPER_DEFAULT_DELAY_MIN=3.0
 SCRAPER_DEFAULT_DELAY_MAX=8.0
 JOBS_RETENTION_DAYS=90
 APPLICATIONS_RETENTION_DAYS=365
 ```
 
-Credentials (job site logins) are stored in macOS Keychain via `keyring` — never in `.env`.
+Credentials (job site logins) are stored in the OS keychain via `keyring` — never in `.env`.
 
 ### Database
 
 SQLite at `data/jobs.db`. Migrations with Alembic:
 
 ```bash
-# Apply pending migrations
 alembic upgrade head
-
-# Create a new migration after model changes
 alembic revision --autogenerate -m "description"
 ```
-
-### Contributing
-
-1. Fork the repo and create a branch: `git checkout -b feature/your-thing`
-2. Make your changes
-3. Run the tests: `python3 -m pytest tests/ -v`
-4. Open a pull request — describe what you changed and why
-
-All new logic with decision paths should have tests. The visa filter is a good example of the expected test structure.
-
----
-
-## Uninstall
-
-One command removes everything — the app, its data, the browser engine, the Launch Agent, and any Keychain entries:
-
-```bash
-./uninstall.sh
-```
-
-It will ask for confirmation twice (once before cleaning system files, once before deleting the project folder) and tell you exactly what it removes at each step.
 
 ---
 

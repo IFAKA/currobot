@@ -129,7 +129,7 @@ function JobRow({
                   size="sm"
                   onClick={e => {
                     e.stopPropagation()
-                    router.push(`/review/${job.id}`)
+                    router.push(`/review?id=${job.id}`)
                   }}
                 >
                   <Briefcase className="h-3 w-3" />

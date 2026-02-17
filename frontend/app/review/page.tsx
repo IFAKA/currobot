@@ -1,6 +1,7 @@
 "use client"
+import { Suspense } from "react"
 import { useEffect, useState, useCallback } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "motion/react"
 import {
   CheckCircle2, XCircle, ArrowLeft, AlertTriangle,
@@ -47,7 +48,6 @@ function QualityRing({ score }: { score: number | null }) {
   )
 }
 
-/** Syntax-highlighted JSON view: string values in green, numbers in blue, keys in gray */
 function JsonHighlight({ data }: { data: Record<string, unknown> }) {
   return (
     <pre className="text-xs leading-relaxed overflow-x-auto whitespace-pre-wrap break-all">
@@ -117,15 +117,14 @@ type ExtendedApplication = Application & {
   form_fields_json?: Record<string, string>
 }
 
-export default function ReviewPage() {
-  const params = useParams()
+function ReviewContent() {
+  const searchParams = useSearchParams()
   const router = useRouter()
-  const appId = Number(params.jobId)
+  const appId = Number(searchParams.get("id"))
 
   const [app, setApp] = useState<ExtendedApplication | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
   const [authorizing, setAuthorizing] = useState(false)
   const [rejecting, setRejecting] = useState(false)
   const [formFields, setFormFields] = useState<Record<string, string>>({})
@@ -133,11 +132,9 @@ export default function ReviewPage() {
 
   const fetchApp = useCallback(async () => {
     try {
-      // No GET /api/applications/:id endpoint — fetch list and find by id
       const res = await api.getApplications()
       const found = res.items.find(a => a.id === appId) as ExtendedApplication | undefined
       if (!found) {
-        // also check pending reviews
         const pending = await api.getPendingReviews()
         const foundPending = pending.items.find(a => a.id === appId) as ExtendedApplication | undefined
         if (foundPending) {
@@ -148,9 +145,7 @@ export default function ReviewPage() {
         throw new Error("Application not found")
       }
       setApp(found)
-      if (found.form_fields_json) {
-        setFormFields(found.form_fields_json)
-      }
+      if (found.form_fields_json) setFormFields(found.form_fields_json)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load application")
     } finally {
@@ -158,11 +153,8 @@ export default function ReviewPage() {
     }
   }, [appId])
 
-  useEffect(() => {
-    fetchApp()
-  }, [fetchApp])
+  useEffect(() => { fetchApp() }, [fetchApp])
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") router.back()
@@ -179,10 +171,7 @@ export default function ReviewPage() {
     try {
       await api.authorizeApplication(app.id)
       setSuccessVisible(true)
-      // auto-dismiss after 2s
-      setTimeout(() => {
-        router.push("/applications")
-      }, 2000)
+      setTimeout(() => router.push("/applications"), 2000)
     } catch {
       // silent
     } finally {
@@ -243,7 +232,6 @@ export default function ReviewPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-5">
-      {/* Success overlay */}
       <AnimatePresence>
         {successVisible && (
           <motion.div
@@ -273,7 +261,6 @@ export default function ReviewPage() {
         )}
       </AnimatePresence>
 
-      {/* Back button */}
       <button
         onClick={() => router.back()}
         className="flex items-center gap-1.5 text-sm text-[#8E8E93] hover:text-white transition-colors"
@@ -282,7 +269,6 @@ export default function ReviewPage() {
         Applications
       </button>
 
-      {/* Top bar: company + title + StatusBadge + quality score */}
       <div className="flex items-center gap-4 flex-wrap">
         <QualityRing score={app.quality_score} />
         <div className="flex-1 min-w-0">
@@ -312,9 +298,7 @@ export default function ReviewPage() {
 
       <SessionCountdown authorizedAt={app.authorized_at} />
 
-      {/* Two-column grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* LEFT (sticky): screenshot */}
         <div className="lg:sticky lg:top-4 self-start">
           <Card className="flex flex-col gap-3">
             <div className="flex items-center gap-2 mb-1">
@@ -339,7 +323,6 @@ export default function ReviewPage() {
           </Card>
         </div>
 
-        {/* RIGHT: CV diff view */}
         <Card className="flex flex-col gap-3 overflow-hidden">
           <div className="flex items-center gap-2 mb-1">
             <Clock className="h-4 w-4 text-[#8E8E93]" />
@@ -357,7 +340,6 @@ export default function ReviewPage() {
         </Card>
       </div>
 
-      {/* Form fields section */}
       {Object.keys(formFields).length > 0 && (
         <Card>
           <h3 className="text-sm font-semibold text-white mb-3">Form Fields</h3>
@@ -383,31 +365,34 @@ export default function ReviewPage() {
         </Card>
       )}
 
-      {/* Bottom action bar (sticky) */}
       <div className="sticky bottom-4 flex items-center justify-between gap-3 bg-[#2C2C2E]/90 backdrop-blur-sm border border-white/10 rounded-2xl p-3">
         <p className="text-xs text-[#8E8E93]">
           <kbd className="bg-white/5 px-1.5 py-0.5 rounded text-white text-[11px]">⌘↵</kbd> Authorize ·{" "}
           <kbd className="bg-white/5 px-1.5 py-0.5 rounded text-white text-[11px]">Esc</kbd> Back
         </p>
         <div className="flex items-center gap-2">
-          <Button
-            variant="destructive"
-            loading={rejecting}
-            onClick={handleReject}
-          >
+          <Button variant="destructive" loading={rejecting} onClick={handleReject}>
             <XCircle className="h-4 w-4" />
             ✕ Reject
           </Button>
-          <Button
-            variant="success"
-            loading={authorizing}
-            onClick={handleAuthorize}
-          >
+          <Button variant="success" loading={authorizing} onClick={handleAuthorize}>
             <CheckCircle2 className="h-4 w-4" />
             ⌘↵ Authorize Submission
           </Button>
         </div>
       </div>
     </div>
+  )
+}
+
+export default function ReviewPage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-5xl mx-auto space-y-4">
+        <div className="h-8 bg-white/5 rounded-xl animate-pulse w-48" />
+      </div>
+    }>
+      <ReviewContent />
+    </Suspense>
   )
 }

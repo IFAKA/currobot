@@ -213,7 +213,7 @@ export default function ApplicationsPage() {
       if (tag === "INPUT" || tag === "TEXTAREA") return
       if (pendingApps.length === 0) return
       const first = pendingApps[0]
-      if (e.key === "a" || e.key === "A") router.push(`/review/${first.id}`)
+      if (e.key === "a" || e.key === "A") router.push(`/review?id=${first.id}`)
       if (e.key === "x" || e.key === "X") handleReject(first.id)
     }
     document.addEventListener("keydown", handler)
@@ -236,7 +236,7 @@ export default function ApplicationsPage() {
   }
 
   const handleCardClick = (app: Application) => {
-    router.push(`/review/${app.id}`)
+    router.push(`/review?id=${app.id}`)
   }
 
   const getColumnApps = (status: string) =>

@@ -4,8 +4,9 @@ import { motion, AnimatePresence } from "motion/react"
 import {
   Cpu, Globe, Clock, Trash2, Building2, XCircle,
   Plus, Save, CheckCircle2, AlertTriangle, Volume2,
-  Database, FileText, ChevronDown
+  Database, FileText, ChevronDown, Power
 } from "lucide-react"
+import { invoke } from "@tauri-apps/api/core"
 import { api } from "@/lib/api"
 import type { CompanySource } from "@/lib/types"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
@@ -243,6 +244,25 @@ export default function SettingsPage() {
   const [testingConnection, setTestingConnection] = useState(false)
   const [connectionResult, setConnectionResult] = useState<string | null>(null)
   const [backupStatus, setBackupStatus] = useState<"idle" | "running" | "done" | "coming_soon">("idle")
+  const [isTauriApp, setIsTauriApp] = useState(false)
+  const [autolaunchOn, setAutolaunchOn] = useState(false)
+
+  useEffect(() => {
+    const tauri = "__TAURI_INTERNALS__" in window
+    setIsTauriApp(tauri)
+    if (tauri) {
+      invoke<boolean>("get_autolaunch_enabled").then(setAutolaunchOn).catch(() => {})
+    }
+  }, [])
+
+  const handleAutolaunchToggle = async (enabled: boolean) => {
+    setAutolaunchOn(enabled)
+    try {
+      await invoke("set_autolaunch", { enabled })
+    } catch {
+      setAutolaunchOn(!enabled) // revert on error
+    }
+  }
 
   // Derived settings with defaults
   const ollamaHost = settings.ollama_host ?? "http://localhost:11434"
@@ -519,6 +539,21 @@ export default function SettingsPage() {
           </div>
         )}
       </Card>
+
+      {/* Desktop (Tauri only) */}
+      {isTauriApp && (
+        <Card>
+          <SectionHeader icon={<Power className="h-4 w-4" />} title="Desktop" />
+          <Toggle
+            label="Start on login"
+            checked={autolaunchOn}
+            onChange={handleAutolaunchToggle}
+          />
+          <p className="text-xs text-[#8E8E93] mt-2">
+            You can also toggle this from the tray icon menu.
+          </p>
+        </Card>
+      )}
 
       {/* Backup */}
       <Card>

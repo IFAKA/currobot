@@ -1,4 +1,4 @@
-"""macOS Keychain credential storage via `keyring`. Never plaintext in DB or files."""
+"""OS credential storage via `keyring` (macOS Keychain, Windows Credential Manager, Linux Secret Service). Never plaintext in DB or files."""
 from __future__ import annotations
 
 from typing import Optional

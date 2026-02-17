@@ -30,9 +30,6 @@ apscheduler==3.10.4
 # Security / credentials
 keyring==25.5.0
 
-# Notifications
-plyer==2.1.0
-
 # Logging
 structlog==24.4.0
 
