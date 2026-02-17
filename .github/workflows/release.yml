@@ -86,7 +86,10 @@ jobs:
       # ── Python backend → single binary via PyInstaller ───────────────────
 
       - name: Install Python deps + PyInstaller
-        run: pip install -r requirements.txt pyinstaller
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
 
       - name: Build Python sidecar
         shell: bash
