@@ -52,6 +52,8 @@ export const api = {
   getSetupStatus: () => request<SetupStatus>("/api/setup/status"),
   acceptTos: () => request<{ accepted_at: string }>("/api/setup/accept-tos", { method: "POST" }),
   completeSetup: () => request<{ status: string }>("/api/setup/complete", { method: "POST" }),
+  checkOllama: () => request<{ installed: boolean; running: boolean }>("/api/setup/ollama-check"),
+  startOllama: () => request<{ status: string }>("/api/setup/start-ollama", { method: "POST" }),
 }
 
 export function createSSEConnection(

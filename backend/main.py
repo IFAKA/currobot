@@ -431,6 +431,20 @@ async def pull_model(body: dict):
     return {"status": "started", "model": model}
 
 
+@app.get("/api/setup/ollama-check")
+async def ollama_check():
+    """Return whether Ollama is installed and whether it's currently running."""
+    from backend.first_run import get_ollama_check
+    return await get_ollama_check()
+
+
+@app.post("/api/setup/start-ollama")
+async def start_ollama():
+    """Attempt to launch 'ollama serve' in the background."""
+    from backend.first_run import start_ollama_serve
+    return await start_ollama_serve()
+
+
 @app.post("/api/backup")
 async def trigger_backup():
     """Manually trigger a database backup."""

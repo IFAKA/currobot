@@ -1,0 +1,165 @@
+# Builds and publishes installers when a version tag is pushed.
+# Usage: git tag v0.1.0 && git push origin v0.1.0
+#
+# Produces:
+#   macOS  — .dmg (unsigned — user must right-click → Open on first launch)
+#   Windows — .msi (unsigned — Windows may show SmartScreen on first launch)
+#
+# To enable code signing, add secrets:
+#   macOS:   APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+#            APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID
+#   Windows: TAURI_PRIVATE_KEY, TAURI_KEY_PASSWORD
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: macos
+            artifact-pattern: frontend/src-tauri/target/release/bundle/dmg/*.dmg
+          - os: windows-latest
+            name: windows
+            artifact-pattern: frontend/src-tauri/target/release/bundle/msi/*.msi
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: frontend/src-tauri
+
+      # ── System deps for WeasyPrint (PDF generation) ─────────────────────
+
+      - name: Install WeasyPrint deps (macOS)
+        if: runner.os == 'macOS'
+        run: brew install pango cairo gdk-pixbuf gobject-introspection libffi
+
+      - name: Install GTK3 via MSYS2 (Windows — required by WeasyPrint)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-pango
+            mingw-w64-x86_64-cairo
+            mingw-w64-x86_64-gdk-pixbuf2
+            mingw-w64-x86_64-libffi
+            mingw-w64-x86_64-fontconfig
+
+      - name: Add MSYS2 mingw64 to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "C:/msys64/mingw64/bin" >> $GITHUB_PATH
+
+      # ── Python backend → single binary via PyInstaller ───────────────────
+
+      - name: Install Python deps + PyInstaller
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build Python sidecar
+        shell: bash
+        run: |
+          TRIPLE=$(rustc -vV | grep '^host:' | cut -d' ' -f2)
+          echo "Building for target triple: $TRIPLE"
+          pyinstaller backend.spec --distpath frontend/src-tauri/binaries/dist
+          # Tauri requires sidecar binary named <name>-<target-triple>[.exe]
+          SRC_DIR="frontend/src-tauri/binaries/dist"
+          DST_DIR="frontend/src-tauri/binaries"
+          if [ -f "$SRC_DIR/jobbot-backend.exe" ]; then
+            mv "$SRC_DIR/jobbot-backend.exe" "$DST_DIR/jobbot-backend-${TRIPLE}.exe"
+          else
+            mv "$SRC_DIR/jobbot-backend" "$DST_DIR/jobbot-backend-${TRIPLE}"
+          fi
+          echo "Sidecar binary placed at $DST_DIR/jobbot-backend-${TRIPLE}"
+
+      # ── Tauri desktop app ────────────────────────────────────────────────
+
+      - name: Install frontend deps
+        run: npm ci
+        working-directory: frontend
+
+      - name: Build Tauri app
+        run: npm run tauri build
+        working-directory: frontend
+        env:
+          # Suppress updater key warnings when no signing secrets are set
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY || '' }}
+
+      # ── Upload artifacts for the release job ─────────────────────────────
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.artifact-pattern }}
+          if-no-files-found: error
+
+  # ── Create GitHub Release with both installers ───────────────────────────
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            | Platform | File |
+            |---|---|
+            | macOS (Apple Silicon) | `.dmg` — drag currobot to Applications |
+            | Windows | `.msi` — run the installer |
+
+            **Before launching, install Ollama** (free, local AI runtime):
+            → https://ollama.com/download
+
+            The app guides you through the rest on first launch.
+
+            ---
+
+            > **macOS note**: The app is unsigned. On first launch, right-click the `.app` → Open, then click Open in the security dialog.
+            >
+            > **Windows note**: If SmartScreen appears, click "More info" → "Run anyway".

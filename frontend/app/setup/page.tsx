@@ -92,12 +92,40 @@ function CheckItem({
 function Step1({
   setupStatus,
   loading,
+  onRefresh,
 }: {
   setupStatus: SetupStatus | null
   loading: boolean
+  onRefresh: () => void
 }) {
-  const ollamaOk = setupStatus?.ollama_running ?? null
   const systemOk = setupStatus?.system_check ?? null
+  const [ollamaStatus, setOllamaStatus] = useState<{ installed: boolean; running: boolean } | null>(null)
+  const [starting, setStarting] = useState(false)
+
+  // Poll ollama status every 3s until it's running, then trigger a wizard refresh
+  useEffect(() => {
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const s = await api.checkOllama()
+        if (!cancelled) {
+          setOllamaStatus(s)
+          if (s.running) onRefresh()
+        }
+      } catch { /* backend not ready yet */ }
+    }
+    poll()
+    const interval = setInterval(poll, 3000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [onRefresh])
+
+  const handleStartOllama = async () => {
+    setStarting(true)
+    try { await api.startOllama() } catch { /* ignore */ } finally { setStarting(false) }
+  }
+
+  const ollamaRunning = ollamaStatus?.running ?? (setupStatus?.ollama_running ?? null)
+  const ollamaInstalled = ollamaStatus?.installed ?? false
 
   return (
     <div className="space-y-4">
@@ -111,7 +139,7 @@ function Step1({
       <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-1">
         <CheckItem label="Python 3.11+" ok={systemOk} loading={loading} />
         <CheckItem label="Node 20+" ok={systemOk} loading={loading} />
-        <CheckItem label="Ollama running" ok={ollamaOk} loading={loading} />
+        <CheckItem label="Ollama running" ok={ollamaRunning} loading={ollamaStatus === null} />
       </div>
 
       {setupStatus && !setupStatus.system_check && (
@@ -123,25 +151,41 @@ function Step1({
         </div>
       )}
 
-      {setupStatus && !setupStatus.ollama_running && (
-        <div className="bg-amber-400/10 border border-amber-400/20 rounded-xl px-3 py-3 space-y-1.5">
-          <p className="text-xs font-semibold text-amber-400">Ollama not detected</p>
-          <p className="text-xs text-amber-400">
-            Install Ollama from{" "}
-            <a
-              href="https://ollama.ai"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
+      {ollamaStatus && !ollamaStatus.running && (
+        ollamaInstalled ? (
+          <div className="bg-amber-400/10 border border-amber-400/20 rounded-xl px-3 py-3 space-y-2.5">
+            <p className="text-xs font-semibold text-amber-400">Ollama is installed but not running</p>
+            <p className="text-xs text-amber-400">
+              Click below to start it, or run{" "}
+              <code className="bg-black/30 px-1.5 py-0.5 rounded font-mono">ollama serve</code>{" "}
+              in your terminal.
+            </p>
+            <Button
+              size="sm"
+              loading={starting}
+              onClick={handleStartOllama}
+              className="bg-amber-400 hover:bg-amber-500 text-black font-semibold"
             >
-              https://ollama.ai
-            </a>{" "}
-            then run:
-          </p>
-          <code className="block bg-black/30 rounded-lg px-3 py-1.5 text-xs text-[#007AFF] font-mono">
-            ollama serve
-          </code>
-        </div>
+              Start Ollama
+            </Button>
+          </div>
+        ) : (
+          <div className="bg-amber-400/10 border border-amber-400/20 rounded-xl px-3 py-3 space-y-2.5">
+            <p className="text-xs font-semibold text-amber-400">Ollama is not installed</p>
+            <p className="text-xs text-amber-400">
+              Ollama runs AI models locally — nothing leaves your device. Free, ~1 min to install.
+            </p>
+            <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer">
+              <Button size="sm" className="bg-amber-400 hover:bg-amber-500 text-black font-semibold">
+                Download Ollama
+              </Button>
+            </a>
+            <p className="text-xs text-amber-400/70">
+              After installing, open a terminal and run:{" "}
+              <code className="bg-black/30 px-1.5 py-0.5 rounded font-mono text-amber-400">ollama serve</code>
+            </p>
+          </div>
+        )
       )}
     </div>
   )
@@ -707,7 +751,7 @@ export default function SetupPage() {
               exit={{ opacity: 0, x: -20 }}
               transition={{ type: "spring", stiffness: 250, damping: 25 }}
             >
-              {step === 1 && <Step1 setupStatus={setupStatus} loading={loading} />}
+              {step === 1 && <Step1 setupStatus={setupStatus} loading={loading} onRefresh={refreshStatus} />}
               {step === 2 && <Step2 health={health} />}
               {step === 3 && <Step3 setupStatus={setupStatus} onRefresh={refreshStatus} />}
               {step === 4 && <Step4 onUploaded={() => setCvUploaded(true)} />}
