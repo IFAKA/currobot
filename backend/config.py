@@ -19,13 +19,14 @@ BACKEND_DIR = ROOT_DIR / "backend"
 DB_PATH            = DATA_DIR / "jobs.db"
 CV_MASTER_PATH     = DATA_DIR / "cv_master.pdf"
 CV_GENERATED_DIR   = DATA_DIR / "cv_generated"
+CV_SOURCES_DIR     = DATA_DIR / "cv_sources"
 BROWSER_PROFILES_DIR = DATA_DIR / "browser_profiles"
 LOGS_DIR           = DATA_DIR / "logs"
 BACKUPS_DIR        = DATA_DIR / "backups"
 TEMPLATES_DIR      = BACKEND_DIR / "documents" / "templates"
 
 # Ensure directories exist at import time
-for _d in (DATA_DIR, CV_GENERATED_DIR, BROWSER_PROFILES_DIR, LOGS_DIR, BACKUPS_DIR):
+for _d in (DATA_DIR, CV_GENERATED_DIR, CV_SOURCES_DIR, BROWSER_PROFILES_DIR, LOGS_DIR, BACKUPS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 

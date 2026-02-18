@@ -15,7 +15,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import CV_MASTER_PATH, settings
-from backend.database.crud import get_setting
+from backend.database.crud import get_setting, list_cv_sources
 
 log = structlog.get_logger(__name__)
 
@@ -30,7 +30,7 @@ async def get_wizard_status(db: AsyncSession) -> dict:
         "system_check": await _check_system(),
         "ollama_running": await _check_ollama(),
         "model_downloaded": bool(ollama_model),
-        "cv_uploaded": CV_MASTER_PATH.exists(),
+        "cv_uploaded": bool(await list_cv_sources(db)) or CV_MASTER_PATH.exists(),
         "tos_accepted": bool(tos_accepted),
         "setup_complete": setup_complete == "true",
     }

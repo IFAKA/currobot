@@ -243,6 +243,17 @@ class Settings(Base):
     )
 
 
+class CVSource(Base):
+    """User-uploaded CV files — supports multiple CVs per profile."""
+    __tablename__ = "cv_sources"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    filename: Mapped[str] = mapped_column(String(256), nullable=False)
+    file_path: Mapped[str] = mapped_column(Text, nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), nullable=False)
+
+
 class CVDocument(Base):
     """Tracks generated CV files per application."""
     __tablename__ = "cv_documents"

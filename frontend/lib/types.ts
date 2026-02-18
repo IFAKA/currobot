@@ -43,3 +43,7 @@ export interface CompanySource {
   id: number; company_name: string; source_url: string;
   scraper_type: string; enabled: boolean; cv_profile: string;
 }
+
+export interface CVSource {
+  id: number; name: string; filename: string; uploaded_at: string;
+}

@@ -20,6 +20,7 @@ from backend.database.models import (
     CompanyBlocklist,
     CompanySource,
     CVDocument,
+    CVSource,
     Job,
     JobStatus,
     ScraperRun,
@@ -394,6 +395,39 @@ async def set_setting(db: AsyncSession, key: str, value: str) -> Settings:
     db.add(row)
     await db.flush()
     return row
+
+
+# ---------------------------------------------------------------------------
+# CV sources
+# ---------------------------------------------------------------------------
+
+async def create_cv_source(
+    db: AsyncSession, *, name: str, filename: str, file_path: str
+) -> CVSource:
+    source = CVSource(name=name, filename=filename, file_path=file_path)
+    db.add(source)
+    await db.flush()
+    return source
+
+
+async def list_cv_sources(db: AsyncSession) -> list[CVSource]:
+    result = await db.execute(select(CVSource).order_by(CVSource.uploaded_at.desc()))
+    return list(result.scalars().all())
+
+
+async def get_cv_source(db: AsyncSession, source_id: int) -> Optional[CVSource]:
+    result = await db.execute(select(CVSource).where(CVSource.id == source_id))
+    return result.scalar_one_or_none()
+
+
+async def delete_cv_source(db: AsyncSession, source_id: int) -> bool:
+    result = await db.execute(select(CVSource).where(CVSource.id == source_id))
+    source = result.scalar_one_or_none()
+    if not source:
+        return False
+    await db.delete(source)
+    await db.flush()
+    return True
 
 
 # ---------------------------------------------------------------------------

@@ -17,15 +17,21 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession  # used in Depends(get_db) type hints
 
 from backend.backup import run_backup
-from backend.config import settings
+from backend.config import CV_MASTER_PATH, CV_SOURCES_DIR, settings
 from backend.database.session import AsyncSessionLocal
 from backend.database import get_db
 from backend.database.crud import (
     count_applications_by_status,
     count_jobs_by_status,
+    create_cv_source,
+    delete_cv_source,
+    get_application,
+    get_cv_source,
     get_pending_reviews,
+    get_setting,
     list_applications,
     list_company_sources,
+    list_cv_sources,
     list_jobs,
     list_scraper_runs,
 )
@@ -106,6 +112,25 @@ async def lifespan(app: FastAPI):
         await asyncio.get_event_loop().run_in_executor(None, run_backup)
     except Exception as exc:
         log.warning("startup.backup_failed", error=str(exc))
+
+    # Auto-import legacy cv_master.pdf into cv_sources if table is empty
+    try:
+        import shutil as _shutil
+        async with AsyncSessionLocal() as db:
+            existing = await list_cv_sources(db)
+            if not existing and CV_MASTER_PATH.exists():
+                dest = CV_SOURCES_DIR / "1_cv_principal.pdf"
+                _shutil.copy2(CV_MASTER_PATH, dest)
+                await create_cv_source(
+                    db,
+                    name="CV Principal",
+                    filename=CV_MASTER_PATH.name,
+                    file_path=str(dest),
+                )
+                await db.commit()
+                log.info("cv.legacy_imported", path=str(dest))
+    except Exception as exc:
+        log.warning("cv.legacy_import_failed", error=str(exc))
 
     # Start scheduler if setup complete
     if settings.setup_complete:
@@ -325,6 +350,34 @@ async def generate_cv(application_id: int):
     return {"status": "started", "task_id": task_id}
 
 
+@app.get("/api/cv/sources")
+async def get_cv_sources(db: AsyncSession = Depends(get_db)):
+    sources = await list_cv_sources(db)
+    return [
+        {
+            "id": s.id,
+            "name": s.name,
+            "filename": s.filename,
+            "uploaded_at": s.uploaded_at.isoformat() if s.uploaded_at else None,
+        }
+        for s in sources
+    ]
+
+
+@app.delete("/api/cv/sources/{source_id}")
+async def delete_cv_source_endpoint(source_id: int, db: AsyncSession = Depends(get_db)):
+    from pathlib import Path as _Path
+    source = await get_cv_source(db, source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="CV source not found")
+    file_path = _Path(source.file_path)
+    await delete_cv_source(db, source_id)
+    await db.commit()
+    if file_path.exists():
+        file_path.unlink()
+    return {"status": "deleted", "id": source_id}
+
+
 # ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------
@@ -395,18 +448,35 @@ async def complete_setup(db: AsyncSession = Depends(get_db)):
 
 
 @app.post("/api/setup/upload-cv")
-async def upload_cv(request: Request):
-    """Accept CV PDF upload and save to data/cv_master.pdf."""
-    from backend.config import CV_MASTER_PATH
+async def upload_cv(request: Request, db: AsyncSession = Depends(get_db)):
+    """Accept CV PDF upload, save to data/cv_sources/, and create a CVSource record."""
+    import re
     form = await request.form()
     file = form.get("file")
     if not file or not hasattr(file, "read"):
         raise HTTPException(status_code=400, detail="No file uploaded")
+    original_filename = getattr(file, "filename", "cv.pdf")
+    name_field = form.get("name", "")
+    name = str(name_field).strip() if name_field else ""
+    if not name:
+        name = re.sub(r"\.(pdf)$", "", original_filename, flags=re.IGNORECASE) or "Mi CV"
+
     content = await file.read()
-    CV_MASTER_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CV_MASTER_PATH.write_bytes(content)
-    log.info("cv.uploaded", size_kb=len(content) // 1024)
-    return {"status": "uploaded", "path": str(CV_MASTER_PATH)}
+    slug = re.sub(r"[^a-z0-9]+", "_", name.lower())[:40]
+
+    # Determine unique filename
+    existing_count = len(await list_cv_sources(db))
+    dest_filename = f"{existing_count + 1}_{slug}.pdf"
+    dest = CV_SOURCES_DIR / dest_filename
+    dest.write_bytes(content)
+
+    source = await create_cv_source(
+        db, name=name, filename=original_filename, file_path=str(dest)
+    )
+    await db.commit()
+
+    log.info("cv.uploaded", name=name, size_kb=len(content) // 1024, id=source.id)
+    return {"status": "uploaded", "path": str(dest), "id": source.id, "name": source.name}
 
 
 @app.post("/api/setup/pull-model")
@@ -482,9 +552,34 @@ async def _generate_cv_task(application_id: int, task_id: str) -> None:
         await sse_hub.broadcast("cv_generation_started", {
             "application_id": application_id, "task_id": task_id
         })
+        from pathlib import Path as _Path
         from backend.ai.cv_adapter import adapt_cv
+        from backend.documents.cv_parser import parse_cv
+
+        async with AsyncSessionLocal() as db:
+            app = await get_application(db, application_id)
+            if not app:
+                raise ValueError(f"Application {application_id} not found")
+
+            # Resolve which CV source to use for this profile
+            source_id_str = await get_setting(db, f"cv_source_{app.cv_profile}", None)
+            if source_id_str:
+                source = await get_cv_source(db, int(source_id_str))
+                cv_path = _Path(source.file_path) if source else CV_MASTER_PATH
+            else:
+                # Fall back: pick first available cv_source, then cv_master.pdf
+                sources = await list_cv_sources(db)
+                cv_path = _Path(sources[0].file_path) if sources else CV_MASTER_PATH
+
+            # Parse and store canonical JSON before adapt_cv runs
+            canonical = await parse_cv(cv_path)
+            app.cv_canonical_json = canonical
+            await db.flush()
+            await db.commit()
+
         async with AsyncSessionLocal() as db:
             result = await adapt_cv(db, application_id)
+
         await sse_hub.broadcast("cv_generation_complete", {
             "application_id": application_id,
             "task_id": task_id,

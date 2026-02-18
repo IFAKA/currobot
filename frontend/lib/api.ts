@@ -6,6 +6,7 @@ import type {
   PaginatedResponse,
   SetupStatus,
   CompanySource,
+  CVSource,
 } from "./types"
 
 const BASE = "http://localhost:8000"
@@ -49,6 +50,8 @@ export const api = {
   updateSettings: (data: Record<string, string>) => request<{ status: string }>("/api/settings", { method: "POST", body: JSON.stringify(data) }),
   getCompanySources: () => request<{ items: CompanySource[] }>("/api/company-sources"),
   addCompanySource: (data: Partial<CompanySource>) => request<CompanySource>("/api/company-sources", { method: "POST", body: JSON.stringify(data) }),
+  listCVSources: () => request<CVSource[]>("/api/cv/sources"),
+  deleteCVSource: (id: number) => request<{ status: string; id: number }>(`/api/cv/sources/${id}`, { method: "DELETE" }),
   getSetupStatus: () => request<SetupStatus>("/api/setup/status"),
   acceptTos: () => request<{ accepted_at: string }>("/api/setup/accept-tos", { method: "POST" }),
   completeSetup: () => request<{ status: string }>("/api/setup/complete", { method: "POST" }),
