@@ -5,7 +5,31 @@
 #   macOS  — .dmg (unsigned — user must right-click → Open on first launch)
 #   Windows — .msi (unsigned — Windows may show SmartScreen on first launch)
 #
-# To enable code signing, add secrets:
+# Architecture strategy:
+#   macOS arm64 (Apple Silicon / M-series):
+#     - Runner: macos-latest (arm64 runner since late 2024)
+#     - Rust target: aarch64-apple-darwin (native compile, no cross)
+#     - PyInstaller: runs natively on arm64, produces arm64 binary
+#     - tauri.conf.json sets signingIdentity: "-" (ad-hoc) so the unsigned
+#       aarch64 .app doesn't show "app is damaged" on first launch
+#
+#   macOS x86_64 (Intel):
+#     - Runner: macos-13 (last Intel runner)
+#     - Rust target: x86_64-apple-darwin (native compile)
+#     - PyInstaller: runs natively on x86_64
+#
+#   Windows x64:
+#     - Runner: windows-latest
+#     - GTK3/Pango/Cairo via MSYS2 (required for WeasyPrint at build time)
+#
+# Why NOT universal-apple-darwin:
+#   PyInstaller cannot cross-compile a Python binary for a different arch.
+#   A "universal2" sidecar requires ALL Python C extensions to ship universal2
+#   wheels, which weasyprint's deps (pango/cairo bindings) do not.  The clean
+#   approach is two separate native builds — each DMG only runs on its own arch,
+#   which is fine for open-source / unsigned distribution.
+#
+# To enable proper code signing, add secrets:
 #   macOS:   APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
 #            APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID
 #   Windows: TAURI_PRIVATE_KEY, TAURI_KEY_PASSWORD
@@ -18,7 +42,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: write   # required by tauri-action to create releases and upload assets
 
 jobs:
   build:
@@ -26,24 +50,42 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # ── macOS Apple Silicon (arm64) ─────────────────────────────────────
+          # macos-latest is now an arm64 runner (M-series), available since
+          # GitHub made it the default in late 2024.
           - os: macos-latest
-            name: macos
-            artifact-pattern: frontend/src-tauri/target/release/bundle/dmg/*.dmg
+            rust-target: aarch64-apple-darwin
+            label: macos-arm64
+
+          # ── macOS Intel (x86_64) ────────────────────────────────────────────
+          # macos-13 is the last Intel-based GitHub-hosted macOS runner.
+          - os: macos-13
+            rust-target: x86_64-apple-darwin
+            label: macos-x64
+
+          # ── Windows x64 ─────────────────────────────────────────────────────
           - os: windows-latest
-            name: windows
-            artifact-pattern: frontend/src-tauri/target/release/bundle/msi/*.msi
+            rust-target: ''       # empty → Rust default (x86_64-pc-windows-msvc)
+            label: windows-x64
 
     runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.label }})
 
     steps:
+      # ── Checkout ─────────────────────────────────────────────────────────────
+
       - uses: actions/checkout@v4
+
+      # ── Node.js ──────────────────────────────────────────────────────────────
+      # cache-dependency-path scoped to the frontend subdirectory so npm's
+      # cache key reflects only the frontend lock file.
 
       - name: Set up Node 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+
+      # ── Python ───────────────────────────────────────────────────────────────
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -51,21 +93,34 @@ jobs:
           python-version: '3.11'
           cache: pip
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      # ── Rust ─────────────────────────────────────────────────────────────────
+      # Install the stable toolchain.  On macOS we only need the one native
+      # target; on Windows the default target is used (no --target flag needed).
 
-      - name: Cache Rust build
+      - name: Set up Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: frontend/src-tauri
 
-      # ── System deps for WeasyPrint (PDF generation) ─────────────────────
+      # ── System deps for WeasyPrint ───────────────────────────────────────────
+      # WeasyPrint requires Pango, Cairo and GDK-PixBuf at build time so that
+      # PyInstaller can collect the native shared libraries into the binary.
 
-      - name: Install WeasyPrint deps (macOS)
+      - name: Install WeasyPrint system deps (macOS)
         if: runner.os == 'macOS'
-        run: brew install pango cairo gdk-pixbuf gobject-introspection libffi
+        run: |
+          brew install pango cairo gdk-pixbuf gobject-introspection libffi
 
-      - name: Install GTK3 via MSYS2 (Windows — required by WeasyPrint)
+      # MSYS2 provides the MinGW-w64 Pango/Cairo stack for Windows.
+      # msys2/setup-msys2@v2 installs MSYS2 and the requested packages.
+      # We add the mingw64/bin directory to PATH so weasyprint can find the
+      # DLLs at runtime (PyInstaller collects them from there too).
+      - name: Install WeasyPrint system deps via MSYS2 (Windows)
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2
         with:
@@ -78,91 +133,100 @@ jobs:
             mingw-w64-x86_64-libffi
             mingw-w64-x86_64-fontconfig
 
-      - name: Add MSYS2 mingw64 to PATH (Windows)
+      - name: Add MSYS2 mingw64/bin to PATH (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: echo "C:/msys64/mingw64/bin" >> $GITHUB_PATH
 
-      # ── Python backend → single binary via PyInstaller ───────────────────
+      # ── Build Python sidecar with PyInstaller ────────────────────────────────
+      # Tauri requires the sidecar to be named:
+      #   binaries/jobbot-backend-<target-triple>        (macOS/Linux)
+      #   binaries/jobbot-backend-<target-triple>.exe    (Windows)
+      #
+      # We derive the target triple from rustc because it's always correct for
+      # the current runner, and it's the same triple Tauri uses internally.
+      #
+      # PyInstaller output goes into a temporary dist/ directory; we then rename
+      # and move the binary into the correct location.
 
-      - name: Install Python deps + PyInstaller
+      - name: Install Python deps and PyInstaller
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build Python sidecar
+      - name: Build Python sidecar binary
         shell: bash
         run: |
           TRIPLE=$(rustc -vV | grep '^host:' | cut -d' ' -f2)
-          echo "Building for target triple: $TRIPLE"
+          echo "Target triple: $TRIPLE"
+
+          # Build into a scratch directory inside binaries/ to avoid polluting it
           pyinstaller backend.spec --distpath frontend/src-tauri/binaries/dist
-          # Tauri requires sidecar binary named <name>-<target-triple>[.exe]
-          SRC_DIR="frontend/src-tauri/binaries/dist"
-          DST_DIR="frontend/src-tauri/binaries"
-          if [ -f "$SRC_DIR/jobbot-backend.exe" ]; then
-            mv "$SRC_DIR/jobbot-backend.exe" "$DST_DIR/jobbot-backend-${TRIPLE}.exe"
+
+          DST=frontend/src-tauri/binaries
+
+          # Rename to the Tauri-required <name>-<triple>[.exe] form
+          if [ -f "$DST/dist/jobbot-backend.exe" ]; then
+            mv "$DST/dist/jobbot-backend.exe" "$DST/jobbot-backend-${TRIPLE}.exe"
           else
-            mv "$SRC_DIR/jobbot-backend" "$DST_DIR/jobbot-backend-${TRIPLE}"
+            mv "$DST/dist/jobbot-backend" "$DST/jobbot-backend-${TRIPLE}"
           fi
-          echo "Sidecar binary placed at $DST_DIR/jobbot-backend-${TRIPLE}"
 
-      # ── Tauri desktop app ────────────────────────────────────────────────
+          echo "Sidecar placed at: $DST/jobbot-backend-${TRIPLE}"
+          ls -lh "$DST/"
 
-      - name: Install frontend deps
-        run: npm install
-        working-directory: frontend
+      # ── Build Tauri application ───────────────────────────────────────────────
+      # tauri-apps/tauri-action@v0 calls `npm run tauri build` inside projectPath,
+      # creates a GitHub release (using tagName), and uploads all bundle artifacts.
+      #
+      # Key inputs:
+      #   projectPath    — where tauri.conf.json lives (the frontend/ subdirectory)
+      #   tagName        — release tag; __VERSION__ is replaced by tauri-action
+      #                    with the version from tauri.conf.json
+      #   args           — passed to `tauri build`; --target selects the Rust
+      #                    target (empty string on Windows → uses host default)
+      #   releaseDraft   — publish as draft so you can review before making public
+      #
+      # APPLE_SIGNING_IDENTITY / TAURI_PRIVATE_KEY are intentionally left out;
+      # without them Tauri produces unsigned bundles.  On macOS arm64, Tauri
+      # automatically performs ad-hoc signing ("-") to prevent the "app is
+      # damaged" Gatekeeper dialog on unsigned aarch64 .app bundles.
 
-      - name: Build Tauri app
-        run: npm run tauri build
-        working-directory: frontend
+      - name: Build and release with tauri-action
+        uses: tauri-apps/tauri-action@v0
         env:
-          # Suppress updater key warnings when no signing secrets are set
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY || '' }}
-
-      # ── Upload artifacts for the release job ─────────────────────────────
-
-      - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pass the signing identity env var so Tauri doesn't error when it can't
+          # find a certificate.  An empty string means "no signing" on macOS
+          # (Tauri falls back to ad-hoc "-" for arm64 automatically).
+          APPLE_SIGNING_IDENTITY: ''
         with:
-          name: ${{ matrix.name }}
-          path: ${{ matrix.artifact-pattern }}
-          if-no-files-found: error
-
-  # ── Create GitHub Release with both installers ───────────────────────────
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: List artifacts
-        run: find artifacts -type f
-
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/**/*
-          generate_release_notes: true
-          body: |
+          projectPath: frontend
+          tagName: v__VERSION__
+          releaseName: 'currobot v__VERSION__'
+          releaseBody: |
             ## Install
 
-            | Platform | File |
+            | Platform | Download |
             |---|---|
-            | macOS (Apple Silicon) | `.dmg` — drag currobot to Applications |
-            | Windows | `.msi` — run the installer |
+            | macOS Apple Silicon (M1 +) | `currobot_*_aarch64.dmg` |
+            | macOS Intel | `currobot_*_x64.dmg` |
+            | Windows | `currobot_*_x64-setup.msi` |
 
-            **Before launching, install Ollama** (free, local AI runtime):
-            → https://ollama.com/download
+            ### First-launch notes
 
-            The app guides you through the rest on first launch.
+            **macOS (unsigned):** Right-click the `.app` → Open, then click Open in
+            the security dialog.  System Settings → Privacy & Security → Open Anyway
+            also works.
 
-            ---
+            **Windows (unsigned):** If SmartScreen appears, click "More info" →
+            "Run anyway".
 
-            > **macOS note**: The app is unsigned. On first launch, right-click the `.app` → Open, then click Open in the security dialog.
-            >
-            > **Windows note**: If SmartScreen appears, click "More info" → "Run anyway".
+            ### Requirements
+
+            Install [Ollama](https://ollama.com/download) before launching — the app
+            will guide you through the rest on first run.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.rust-target != '' && format('--target {0}', matrix.rust-target) || '' }}
