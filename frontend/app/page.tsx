@@ -23,7 +23,7 @@ function RAMBar({ used, total, percent }: { used: number; total: number; percent
   const color = percent > 85 ? "bg-[#FF3B30]" : percent > 60 ? "bg-amber-400" : "bg-[#34C759]"
   return (
     <div className="space-y-1">
-      <div className="flex justify-between text-xs text-[#8E8E93]">
+      <div className="flex justify-between text-xs text-[var(--fg-secondary)]">
         <span>RAM</span>
         <span>{used.toFixed(1)} / {total.toFixed(1)} GB ({percent.toFixed(0)}%)</span>
       </div>
@@ -43,7 +43,7 @@ function DiskBar({ freeGb }: { freeGb: number }) {
   const warningLevel = freeGb < 5 ? "bg-[#FF3B30]" : freeGb < 20 ? "bg-amber-400" : "bg-[#34C759]"
   return (
     <div className="space-y-1">
-      <div className="flex justify-between text-xs text-[#8E8E93]">
+      <div className="flex justify-between text-xs text-[var(--fg-secondary)]">
         <span>Disk Free</span>
         <span>{freeGb.toFixed(1)} GB</span>
       </div>
@@ -85,7 +85,7 @@ function FunnelBar({ counts }: { counts: Record<string, number> }) {
                 animate={{ width: `${pct}%` }}
                 transition={{ type: "spring", stiffness: 80, damping: 20, delay: 0.1 }}
               />
-              <span className="absolute inset-0 flex items-center px-2 text-xs font-medium text-white">
+              <span className="absolute inset-0 flex items-center px-2 text-xs font-medium text-[var(--fg)]">
                 {val}
               </span>
             </div>
@@ -128,7 +128,7 @@ function ScraperCard({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <HealthDot status={dotStatus} pulse={dotStatus === "running"} />
-          <span className="text-sm font-semibold text-white capitalize">{scraper.site}</span>
+          <span className="text-sm font-semibold text-[var(--fg)] capitalize">{scraper.site}</span>
         </div>
         <Button
           size="sm"
@@ -144,12 +144,12 @@ function ScraperCard({
 
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div>
-          <p className="text-[#8E8E93]">Last run</p>
-          <p className="text-white">{formatDate(scraper.last_run)}</p>
+          <p className="text-[var(--fg-secondary)]">Last run</p>
+          <p className="text-[var(--fg)]">{formatDate(scraper.last_run)}</p>
         </div>
         <div>
-          <p className="text-[#8E8E93]">Jobs found</p>
-          <p className="text-white">
+          <p className="text-[var(--fg-secondary)]">Jobs found</p>
+          <p className="text-[var(--fg)]">
             {scraper.jobs_found} <span className="text-[#34C759]">(+{scraper.jobs_new} new)</span>
           </p>
         </div>
@@ -175,21 +175,28 @@ export default function DashboardPage() {
   const [scrapers, setScrapers] = useState<ScraperStatus[]>([])
   const [appCounts, setAppCounts] = useState<Record<string, number>>({})
   const [pendingReviews, setPendingReviews] = useState<Application[]>([])
+  const [ollamaRunning, setOllamaRunning] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(true)
+  const [startingUp, setStartingUp] = useState(true)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
 
   const fetchAll = useCallback(async () => {
     try {
-      const [h, s, ac, pr] = await Promise.allSettled([
+      const [h, s, ac, pr, ol] = await Promise.allSettled([
         api.getHealth(),
         api.getScraperStatus(),
         api.getApplicationCounts(),
         api.getPendingReviews(),
+        api.checkOllama(),
       ])
-      if (h.status === "fulfilled") setHealth(h.value)
+      if (h.status === "fulfilled") {
+        setHealth(h.value)
+        setStartingUp(false)
+      }
       if (s.status === "fulfilled") setScrapers(s.value.scrapers)
       if (ac.status === "fulfilled") setAppCounts(ac.value)
       if (pr.status === "fulfilled") setPendingReviews(pr.value.items)
+      if (ol.status === "fulfilled") setOllamaRunning(ol.value.running)
       setLastRefresh(new Date())
     } finally {
       setLoading(false)
@@ -198,6 +205,13 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchAll()
+    // Retry every 2s during startup (first 25s) so backend startup delay is transparent
+    const startupInterval = setInterval(fetchAll, 2000)
+    const startupTimeout = setTimeout(() => {
+      setStartingUp(false)
+      clearInterval(startupInterval)
+    }, 25_000)
+    // Normal poll after startup
     const interval = setInterval(fetchAll, 30000)
     const closeSSE = createSSEConnection((event) => {
       if (
@@ -210,6 +224,8 @@ export default function DashboardPage() {
       }
     })
     return () => {
+      clearInterval(startupInterval)
+      clearTimeout(startupTimeout)
       clearInterval(interval)
       closeSSE()
     }
@@ -219,22 +235,22 @@ export default function DashboardPage() {
     await api.triggerScraper(site)
   }
 
-  const ollamaStatus = health
-    ? health.status === "ok" || health.ollama_host ? "ok" : "error"
-    : "unknown"
+  const ollamaStatus = ollamaRunning === null
+    ? health ? "ok" : "unknown"
+    : ollamaRunning ? "ok" : "error"
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-          <p className="text-sm text-[#8E8E93] mt-0.5">
+          <h1 className="text-2xl font-bold text-[var(--fg)]">Dashboard</h1>
+          <p className="text-sm text-[var(--fg-secondary)] mt-0.5">
             JobBot — local automation
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-[#8E8E93]">
+          <span className="text-xs text-[var(--fg-secondary)]">
             <Clock className="h-3 w-3 inline mr-1" />
             Updated {formatDate(lastRefresh.toISOString())}
           </span>
@@ -282,7 +298,7 @@ export default function DashboardPage() {
                 status={health ? (health.status === "ok" ? "ok" : "warning") : "unknown"}
                 pulse={!health}
               />
-              <span className="text-xs text-[#8E8E93]">
+              <span className="text-xs text-[var(--fg-secondary)]">
                 {health ? health.status : "Checking..."}
               </span>
             </div>
@@ -304,12 +320,18 @@ export default function DashboardPage() {
             <DiskBar freeGb={health.disk_free_gb} />
 
             <div className="flex items-center gap-2 pt-1">
-              <Cpu className="h-3.5 w-3.5 text-[#8E8E93]" />
-              <span className="text-xs text-[#8E8E93]">Ollama:</span>
-              <HealthDot status={ollamaStatus as "ok" | "error"} />
-              <span className="text-xs text-white">{health.ollama_host}</span>
+              <Cpu className="h-3.5 w-3.5 text-[var(--fg-secondary)]" />
+              <span className="text-xs text-[var(--fg-secondary)]">Ollama:</span>
+              <HealthDot status={ollamaStatus as "ok" | "error" | "unknown"} />
+              {ollamaRunning === false ? (
+                <span className="text-xs text-[#FF3B30]">Not running — start Ollama to enable AI</span>
+              ) : (
+                <span className="text-xs text-[var(--fg)]">{health.ollama_host}</span>
+              )}
             </div>
           </div>
+        ) : startingUp ? (
+          <p className="text-sm text-[var(--fg-secondary)]">Starting up...</p>
         ) : (
           <p className="text-sm text-[#FF3B30]">Backend unreachable — is the API running?</p>
         )}
@@ -317,7 +339,7 @@ export default function DashboardPage() {
 
       {/* Scrapers Grid */}
       <div>
-        <h2 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
+        <h2 className="text-base font-semibold text-[var(--fg)] mb-3 flex items-center gap-2">
           <Zap className="h-4 w-4 text-[#007AFF]" />
           Scrapers
         </h2>
@@ -349,7 +371,7 @@ export default function DashboardPage() {
 
       {/* Application Funnel */}
       <div>
-        <h2 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
+        <h2 className="text-base font-semibold text-[var(--fg)] mb-3 flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-[#34C759]" />
           Application Funnel
         </h2>
@@ -370,7 +392,7 @@ export default function DashboardPage() {
       {!loading && Object.keys(appCounts).length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: "Total Jobs", value: Object.values(appCounts).reduce((a, b) => a + b, 0), color: "text-white" },
+            { label: "Total Jobs", value: Object.values(appCounts).reduce((a, b) => a + b, 0), color: "text-[var(--fg)]" },
             { label: "Applied", value: appCounts.applied ?? 0, color: "text-[#34C759]" },
             { label: "Pending Review", value: appCounts.pending_human_review ?? 0, color: "text-amber-400" },
             { label: "Offered", value: appCounts.offered ?? 0, color: "text-purple-400" },
@@ -383,7 +405,7 @@ export default function DashboardPage() {
             >
               <Card className="text-center py-3">
                 <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
-                <p className="text-xs text-[#8E8E93] mt-0.5">{stat.label}</p>
+                <p className="text-xs text-[var(--fg-secondary)] mt-0.5">{stat.label}</p>
               </Card>
             </motion.div>
           ))}

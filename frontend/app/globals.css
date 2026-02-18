@@ -1,14 +1,33 @@
 @import "tailwindcss";
 
+/* Light mode defaults */
 :root {
+  --bg: #f2f2f7;
+  --surface: rgba(0, 0, 0, 0.04);
+  --border: rgba(0, 0, 0, 0.08);
+  --fg: #1c1c1e;
+  --fg-secondary: #636366;
   --accent: #007AFF;
   --success: #34C759;
   --danger: #FF3B30;
   --secondary: #8E8E93;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
+}
+
+/* Dark mode via system preference — Tailwind v4 dark: variants respond to this automatically */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1C1C1E;
+    --surface: rgba(255, 255, 255, 0.05);
+    --border: rgba(255, 255, 255, 0.1);
+    --fg: #ffffff;
+    --fg-secondary: #aeaeb2;
+    --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+  }
 }
 
 * { box-sizing: border-box; }
 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 2px; }

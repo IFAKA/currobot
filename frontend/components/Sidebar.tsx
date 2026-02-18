@@ -35,7 +35,7 @@ export function Sidebar() {
   }, [])
 
   return (
-    <nav className="fixed left-0 top-0 h-full w-16 bg-[#1C1C1E] border-r border-white/5 flex flex-col items-center py-4 gap-1 z-40">
+    <nav className="fixed left-0 top-0 h-full w-16 border-r flex flex-col items-center py-4 gap-1 z-40" style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
       <div className="mb-4">
         <div className="w-8 h-8 rounded-xl bg-[#007AFF] flex items-center justify-center">
           <Bot className="h-4 w-4 text-white" />
@@ -51,7 +51,7 @@ export function Sidebar() {
                 "w-10 h-10 rounded-xl flex items-center justify-center transition-colors",
                 active
                   ? "bg-[#007AFF] text-white"
-                  : "text-[#8E8E93] hover:text-white hover:bg-white/5"
+                  : "text-[var(--fg-secondary)] hover:text-[var(--fg)] hover:bg-[var(--surface)]"
               )}
             >
               <Icon className="h-[18px] w-[18px]" />

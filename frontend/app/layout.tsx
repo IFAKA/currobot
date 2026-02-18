@@ -15,8 +15,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className="dark">
-      <body className={`${geist.variable} ${geistMono.variable} bg-[#1C1C1E] text-white antialiased`}>
+    <html lang="es">
+      <body className={`${geist.variable} ${geistMono.variable} antialiased`} style={{ background: "var(--bg)", color: "var(--fg)" }}>
         <Sidebar />
         <CommandPalette />
         <Toaster />
