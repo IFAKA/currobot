@@ -73,20 +73,39 @@ currobot lives in the **system tray**. Close the window and it keeps running. Cl
 
 ## Uninstall
 
-**Step 1 — disable autolaunch** (skip if you never enabled it):
-Right-click the tray icon → **Uninstall currobot…** — this disables the login item and quits the app.
+**macOS — one-liner (removes app, all data, and Keychain entries):**
+```bash
+osascript -e 'tell application "currobot" to quit' 2>/dev/null; sleep 1; \
+  rm -rf /Applications/currobot.app \
+         "$HOME/Library/Application Support/com.currobot.app" \
+         "$HOME/Library/Logs/com.currobot.app"; \
+  security delete-generic-password -s currobot 2>/dev/null; \
+  launchctl remove com.currobot.app 2>/dev/null; \
+  echo "currobot removed"
+```
 
-**Step 2 — remove the app:**
-- macOS: move `currobot.app` from Applications to Trash
-- Windows: Settings → Add or Remove Programs → currobot → Uninstall
+**Windows — run in PowerShell as Administrator:**
+```powershell
+Stop-Process -Name currobot -Force -ErrorAction SilentlyContinue
+Start-Sleep 1
+Get-WmiObject Win32_Product | Where-Object { $_.Name -eq "currobot" } | ForEach-Object { $_.Uninstall() }
+Remove-Item "$env:APPDATA\com.currobot.app" -Recurse -Force -ErrorAction SilentlyContinue
+cmdkey /delete:currobot 2>$null
+Write-Host "currobot removed"
+```
 
-**Step 3 — remove app data (optional):**
-- macOS: `~/Library/Application Support/com.currobot.app/`
-- Windows: `%APPDATA%\com.currobot.app\`
+**Manual steps (if you prefer):**
 
-**Step 4 — remove Keychain entries (optional):**
-- macOS: open Keychain Access, search "currobot", delete matching entries
-- Windows: open Credential Manager, remove "currobot" entries
+1. Right-click the tray icon → **Uninstall currobot…** — disables autolaunch and quits the app
+2. Remove the app:
+   - macOS: move `currobot.app` from Applications to Trash
+   - Windows: Settings → Add or Remove Programs → currobot → Uninstall
+3. Remove app data (optional):
+   - macOS: `~/Library/Application Support/com.currobot.app/`
+   - Windows: `%APPDATA%\com.currobot.app\`
+4. Remove Keychain entries (optional):
+   - macOS: Keychain Access → search "currobot" → delete
+   - Windows: Credential Manager → remove "currobot" entries
 
 ---
 
