@@ -57,12 +57,6 @@ jobs:
             rust-target: aarch64-apple-darwin
             label: macos-arm64
 
-          # ── macOS Intel (x86_64) ────────────────────────────────────────────
-          # macos-13 is the last Intel-based GitHub-hosted macOS runner.
-          - os: macos-13
-            rust-target: x86_64-apple-darwin
-            label: macos-x64
-
           # ── Windows x64 ─────────────────────────────────────────────────────
           - os: windows-latest
             rust-target: ''       # empty → Rust default (x86_64-pc-windows-msvc)
@@ -175,6 +169,16 @@ jobs:
 
           echo "Sidecar placed at: $DST/jobbot-backend-${TRIPLE}"
           ls -lh "$DST/"
+
+      # ── Install frontend dependencies ────────────────────────────────────────
+      # Must run BEFORE tauri-action so @tauri-apps/cli and its platform-specific
+      # native binding (e.g. cli-win32-x64-msvc) are present in node_modules.
+      # Use npm install (not npm ci) so npm resolves optional deps for the current
+      # platform regardless of what the lockfile was generated on.
+
+      - name: Install frontend npm dependencies
+        run: npm install
+        working-directory: frontend
 
       # ── Build Tauri application ───────────────────────────────────────────────
       # tauri-apps/tauri-action@v0 calls `npm run tauri build` inside projectPath,
