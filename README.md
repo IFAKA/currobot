@@ -23,6 +23,14 @@ Download the latest release for your platform from the [Releases page](../../rel
 - **macOS** — `.dmg` → drag currobot to Applications
 - **Windows** — `.msi` → run the installer
 
+**macOS only — "cannot be opened" warning:**
+macOS may block currobot because it isn't signed with an Apple Developer certificate. To open it anyway, right-click (or Control-click) `currobot.app` and choose **Open**, then click **Open** in the dialog. You only need to do this once.
+
+Alternatively, run this in Terminal after installing:
+```bash
+xattr -d com.apple.quarantine /Applications/currobot.app
+```
+
 **Before launching, install Ollama** (the local AI runtime):
 Download from [ollama.ai](https://ollama.ai) and run it. currobot uses it to adapt your CV locally — no data leaves your device.
 
