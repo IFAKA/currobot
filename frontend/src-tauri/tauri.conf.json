@@ -33,6 +33,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["binaries/jobbot-backend"]
+    "externalBin": ["binaries/jobbot-backend"],
+    "macOS": {
+      "signingIdentity": "-"
+    }
   }
 }

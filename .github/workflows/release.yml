@@ -201,10 +201,6 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Pass the signing identity env var so Tauri doesn't error when it can't
-          # find a certificate.  An empty string means "no signing" on macOS
-          # (Tauri falls back to ad-hoc "-" for arm64 automatically).
-          APPLE_SIGNING_IDENTITY: ''
         with:
           projectPath: frontend
           tagName: v__VERSION__
