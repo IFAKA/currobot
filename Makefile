@@ -18,13 +18,15 @@ SHELL := /bin/bash
 
 dev:
 	@echo "Starting backend..."
-	@source .venv/bin/activate 2>/dev/null || python3 -m venv .venv && source .venv/bin/activate && pip install -q -r requirements.txt
+	@test -d .venv || python3.13 -m venv .venv
+	@source .venv/bin/activate && pip install -q -r requirements.txt
 	@source .venv/bin/activate && uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload &
 	@echo "Starting frontend..."
 	@cd frontend && npm install --silent && npm run dev
 
 tauri-dev:
-	@source .venv/bin/activate 2>/dev/null || (python3 -m venv .venv && source .venv/bin/activate && pip install -q -r requirements.txt)
+	@test -d .venv || python3.13 -m venv .venv
+	@source .venv/bin/activate && pip install -q -r requirements.txt
 	@source .venv/bin/activate && uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload &
 	@cd frontend && npm install --silent && npm run tauri dev
 
