@@ -177,8 +177,11 @@ jobs:
       # platform regardless of what the lockfile was generated on.
 
       - name: Install frontend npm dependencies
-        run: npm install
-        working-directory: frontend
+        shell: bash
+        run: |
+          cd frontend
+          rm -rf node_modules package-lock.json
+          npm install
 
       # ── Build Tauri application ───────────────────────────────────────────────
       # tauri-apps/tauri-action@v0 calls `npm run tauri build` inside projectPath,
