@@ -54,6 +54,7 @@ function JobRow({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
+      whileTap={{ scale: 0.98 }}
       transition={{ type: "spring", stiffness: 200, damping: 22 }}
     >
       <Card

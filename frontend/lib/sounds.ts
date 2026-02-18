@@ -1,22 +1,42 @@
 "use client"
-// Howler.js sound manager — respects prefers-reduced-motion
-import { Howl } from "howler"
+// Sound facade — delegates to Web Audio API synthesizer (no MP3 files needed)
+// Respects prefers-reduced-motion
+
+import {
+  unlockAudio as _unlockAudio,
+  playSuccess as _playSuccess,
+  playError as _playError,
+  playNotification as _playNotification,
+  playTick,
+  playSwoosh,
+} from "@/lib/audio"
 
 const prefersReducedMotion = () =>
-  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  typeof window !== "undefined" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
-// Placeholder paths — add actual sound files to /public/sounds/
-const sounds = {
-  tick:         new Howl({ src: ["/sounds/tick.mp3"],         volume: 0.15, preload: false }),
-  success:      new Howl({ src: ["/sounds/success.mp3"],      volume: 0.2,  preload: false }),
-  swoosh:       new Howl({ src: ["/sounds/swoosh.mp3"],       volume: 0.15, preload: false }),
-  error:        new Howl({ src: ["/sounds/error.mp3"],        volume: 0.2,  preload: false }),
-  notification: new Howl({ src: ["/sounds/notification.mp3"], volume: 0.2,  preload: false }),
+function guarded(fn: () => void): void {
+  if (prefersReducedMotion()) return
+  try { fn() } catch { /* ignore */ }
 }
 
-export type SoundName = keyof typeof sounds
+export function unlockAudio():      void { _unlockAudio() }
+export function playSuccess():      void { guarded(_playSuccess) }
+export function playError():        void { guarded(_playError) }
+export function playNotification(): void { guarded(_playNotification) }
+
+// Legacy playSound() used by CommandPalette
+export type SoundName = "tick" | "swoosh" | "success" | "error" | "notification"
 
 export function playSound(name: SoundName): void {
   if (prefersReducedMotion()) return
-  try { sounds[name].play() } catch { /* ignore */ }
+  try {
+    switch (name) {
+      case "tick":         playTick();          break
+      case "swoosh":       playSwoosh();        break
+      case "success":      _playSuccess();      break
+      case "error":        _playError();        break
+      case "notification": _playNotification(); break
+    }
+  } catch { /* ignore */ }
 }

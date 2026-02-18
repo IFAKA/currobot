@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"
 import { api } from "@/lib/api"
+import { playSuccess, playError } from "@/lib/sounds"
 import type { CompanySource } from "@/lib/types"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -298,8 +299,11 @@ export default function SettingsPage() {
     setSaving(true)
     try {
       await api.updateSettings(settings)
+      playSuccess()
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
+    } catch {
+      playError()
     } finally {
       setSaving(false)
     }

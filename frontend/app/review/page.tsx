@@ -8,6 +8,7 @@ import {
   ExternalLink, Clock, Image as ImageIcon
 } from "lucide-react"
 import { api } from "@/lib/api"
+import { playSuccess, playError } from "@/lib/sounds"
 import type { Application } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/lib/toast"
@@ -130,6 +131,7 @@ function ReviewContent() {
   const [rejecting, setRejecting] = useState(false)
   const [formFields, setFormFields] = useState<Record<string, string>>({})
   const [successVisible, setSuccessVisible] = useState(false)
+  const [flashColor, setFlashColor] = useState<"green" | "red" | null>(null)
 
   const fetchApp = useCallback(async () => {
     try {
@@ -171,9 +173,13 @@ function ReviewContent() {
     setAuthorizing(true)
     try {
       await api.authorizeApplication(app.id)
+      playSuccess()
+      setFlashColor("green")
+      setTimeout(() => setFlashColor(null), 600)
       setSuccessVisible(true)
       setTimeout(() => router.push("/applications"), 2000)
     } catch {
+      playError()
       toast.error("Failed to authorize application")
     } finally {
       setAuthorizing(false)
@@ -187,6 +193,9 @@ function ReviewContent() {
       await api.rejectApplication(app.id)
       router.push("/applications")
     } catch {
+      playError()
+      setFlashColor("red")
+      setTimeout(() => setFlashColor(null), 600)
       toast.error("Failed to reject application")
     } finally {
       setRejecting(false)
@@ -232,7 +241,11 @@ function ReviewContent() {
     : null
 
   return (
-    <div className="max-w-6xl mx-auto space-y-5">
+    <div className={cn(
+      "max-w-6xl mx-auto space-y-5 rounded-2xl transition-colors duration-500",
+      flashColor === "green" && "bg-green-950/30",
+      flashColor === "red"   && "bg-red-950/30",
+    )}>
       <AnimatePresence>
         {successVisible && (
           <motion.div
@@ -242,21 +255,28 @@ function ReviewContent() {
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
           >
             <motion.div
-              initial={{ scale: 0.7, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.7, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 220, damping: 18 }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ type: "spring", stiffness: 260, damping: 22 }}
               className="text-center"
             >
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.1, type: "spring", stiffness: 300, damping: 18 }}
+              <CheckCircle2
+                className="h-24 w-24 text-[#34C759] mx-auto mb-4"
+                style={{ animation: "bounce-in 350ms cubic-bezier(0.34, 1.56, 0.64, 1) 100ms backwards" }}
+              />
+              <h2
+                className="text-3xl font-bold text-white"
+                style={{ animation: "slide-up-in 260ms ease-out 300ms backwards" }}
               >
-                <CheckCircle2 className="h-24 w-24 text-[#34C759] mx-auto mb-4" />
-              </motion.div>
-              <h2 className="text-3xl font-bold text-white">Application submitted!</h2>
-              <p className="text-[#8E8E93] mt-2">Redirecting to applications...</p>
+                Application submitted!
+              </h2>
+              <p
+                className="text-[#8E8E93] mt-2"
+                style={{ animation: "slide-up-in 260ms ease-out 380ms backwards" }}
+              >
+                Redirecting to applications...
+              </p>
             </motion.div>
           </motion.div>
         )}
@@ -264,7 +284,7 @@ function ReviewContent() {
 
       <button
         onClick={() => router.back()}
-        className="flex items-center gap-1.5 text-sm text-[#8E8E93] hover:text-white transition-colors"
+        className="flex items-center gap-1.5 text-sm text-[#8E8E93] hover:text-white transition-colors active:scale-95 transition-transform"
       >
         <ArrowLeft className="h-4 w-4" />
         Applications

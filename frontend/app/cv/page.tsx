@@ -79,7 +79,7 @@ function GenerateModal({ profile, onClose }: GenerateModalProps) {
             <span className="text-2xl">{profile.emoji}</span>
             <h3 className="text-base font-semibold text-white">{profile.label}</h3>
           </div>
-          <button onClick={onClose} className="text-[#8E8E93] hover:text-white transition-colors">
+          <button onClick={onClose} className="text-[#8E8E93] hover:text-white transition-colors active:scale-95 transition-transform">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -357,7 +357,7 @@ export default function CVProfilesPage() {
               </div>
               <button
                 onClick={() => handleDelete(source.id)}
-                className="text-[#8E8E93] hover:text-[#FF3B30] transition-colors p-1.5 rounded-lg hover:bg-[#FF3B30]/10"
+                className="text-[#8E8E93] hover:text-[#FF3B30] transition-colors active:scale-95 transition-transform p-1.5 rounded-lg hover:bg-[#FF3B30]/10"
                 title="Eliminar"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -402,7 +402,7 @@ export default function CVProfilesPage() {
                   key={profile.id}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.06, type: "spring", stiffness: 180, damping: 20 }}
+                  transition={{ delay: 0.5 + i * 0.08, type: "spring", stiffness: 180, damping: 20 }}
                   whileHover={{ y: -2 }}
                 >
                   <Card

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "motion/react"
 import { useRouter } from "next/navigation"
 import { XCircle, Clock } from "lucide-react"
 import { api, createSSEConnection } from "@/lib/api"
+import { playError } from "@/lib/sounds"
 import type { Application } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { formatDate, cvProfileColor, cn } from "@/lib/utils"
@@ -223,6 +224,7 @@ export default function ApplicationsPage() {
         prev.map(a => a.id === id ? { ...a, status: "rejected" as const } : a)
       )
     } catch {
+      playError()
       toast.error("Failed to reject application")
     } finally {
       setActionInProgress(null)

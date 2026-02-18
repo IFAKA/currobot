@@ -360,7 +360,7 @@ export default function DashboardPage() {
                 key={s.site}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05, type: "spring", stiffness: 200, damping: 20 }}
+                transition={{ delay: 0.5 + i * 0.08, type: "spring", stiffness: 200, damping: 20 }}
               >
                 <ScraperCard scraper={s} onTrigger={handleTrigger} />
               </motion.div>
@@ -401,7 +401,7 @@ export default function DashboardPage() {
               key={stat.label}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: i * 0.05 + 0.1, type: "spring", stiffness: 200 }}
+              transition={{ delay: 0.5 + i * 0.08, type: "spring", stiffness: 200 }}
             >
               <Card className="text-center py-3">
                 <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>

@@ -6,6 +6,7 @@ import { LayoutGrid, Briefcase, Kanban, FileText, Settings, Bot } from "lucide-r
 import { cn } from "@/lib/utils"
 import { motion } from "motion/react"
 import { api, createSSEConnection } from "@/lib/api"
+import { playNotification, unlockAudio } from "@/lib/sounds"
 
 const nav = [
   { href: "/",             icon: LayoutGrid, label: "Dashboard" },
@@ -20,18 +21,31 @@ export function Sidebar() {
   const [pendingCount, setPendingCount] = useState(0)
 
   useEffect(() => {
+    const handleFirstInteraction = () => {
+      unlockAudio()
+      document.removeEventListener("pointerdown", handleFirstInteraction)
+    }
+    document.addEventListener("pointerdown", handleFirstInteraction)
+
     const load = () => {
       api.getPendingReviews().then(r => setPendingCount(r.count)).catch(() => {})
     }
     load()
     const close = createSSEConnection((event) => {
-      if (
-        event === "review_ready" ||
+      if (event === "review_ready") {
+        playNotification()
+        load()
+      } else if (
         event === "application_authorized" ||
         event === "application_rejected"
-      ) load()
+      ) {
+        load()
+      }
     })
-    return () => close()
+    return () => {
+      document.removeEventListener("pointerdown", handleFirstInteraction)
+      close()
+    }
   }, [])
 
   return (
