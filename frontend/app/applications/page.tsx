@@ -4,19 +4,50 @@ import { motion, AnimatePresence } from "motion/react"
 import { useRouter } from "next/navigation"
 import { XCircle, Clock } from "lucide-react"
 import { api, createSSEConnection } from "@/lib/api"
-import { playError } from "@/lib/sounds"
+import { playError, playSuccess } from "@/lib/sounds"
 import type { Application } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { formatDate, cvProfileColor, cn } from "@/lib/utils"
 import { toast } from "@/lib/toast"
 
-const COLUMNS: { status: string; label: string; accent: string }[] = [
-  { status: "pending_human_review", label: "Pending Review",  accent: "border-amber-400/40" },
-  { status: "cv_generating",        label: "CV Generating",   accent: "border-[#007AFF]/40" },
-  { status: "applied",              label: "Applied",         accent: "border-[#34C759]/40" },
-  { status: "offered",              label: "Offered",         accent: "border-[#34C759]/40" },
-  { status: "rejected",             label: "Rejected",        accent: "border-[#FF3B30]/40" },
+const COLUMNS: { id: string; label: string; accent: string }[] = [
+  { id: "pending_human_review", label: "Pending Review",  accent: "border-amber-400/40" },
+  { id: "cv_generating",        label: "CV Generating",   accent: "border-[#007AFF]/40" },
+  { id: "applied",              label: "Applied",         accent: "border-[#34C759]/40" },
+  { id: "interview",            label: "Interview",       accent: "border-purple-400/40" },
+  { id: "offered",              label: "Offered",         accent: "border-[#34C759]/40" },
+  { id: "rejected",             label: "Rejected",        accent: "border-[#FF3B30]/40" },
 ]
+
+// Statuses user can transition to from a given status
+const STATUS_TRANSITIONS: Record<string, { value: string; label: string }[]> = {
+  applied: [
+    { value: "interview_scheduled", label: "Interview Scheduled" },
+    { value: "offered",             label: "Offered" },
+    { value: "rejected",            label: "Rejected" },
+    { value: "withdrawn",           label: "Withdrawn" },
+  ],
+  submitted_ambiguous: [
+    { value: "interview_scheduled", label: "Interview Scheduled" },
+    { value: "offered",             label: "Offered" },
+    { value: "rejected",            label: "Rejected" },
+    { value: "withdrawn",           label: "Withdrawn" },
+  ],
+  interview_scheduled: [
+    { value: "interviewed", label: "Interviewed" },
+    { value: "offered",     label: "Offered" },
+    { value: "rejected",    label: "Rejected" },
+    { value: "withdrawn",   label: "Withdrawn" },
+  ],
+  interviewed: [
+    { value: "offered",   label: "Offered" },
+    { value: "rejected",  label: "Rejected" },
+    { value: "withdrawn", label: "Withdrawn" },
+  ],
+  offered: [
+    { value: "withdrawn", label: "Withdrawn" },
+  ],
+}
 
 function QualityBadge({ score }: { score: number | null }) {
   if (score === null) return null
@@ -35,12 +66,15 @@ function AppCard({
   app,
   onReject,
   onClick,
+  onStatusChange,
 }: {
   app: Application
   onReject?: () => void
   onClick: () => void
+  onStatusChange?: (newStatus: string) => void
 }) {
   const isPending = app.status === "pending_human_review"
+  const transitions = STATUS_TRANSITIONS[app.status] ?? []
 
   return (
     <motion.div
@@ -99,6 +133,24 @@ function AppCard({
         </div>
       )}
 
+      {transitions.length > 0 && onStatusChange && (
+        <div className="mt-2.5 pt-2.5 border-t border-white/5" onClick={e => e.stopPropagation()}>
+          <select
+            className="w-full bg-white/5 border border-white/10 rounded-lg text-xs text-[#8E8E93] px-2 py-1.5 cursor-pointer hover:bg-white/10 transition-colors"
+            defaultValue=""
+            onChange={e => {
+              if (e.target.value) onStatusChange(e.target.value)
+              e.target.value = ""
+            }}
+          >
+            <option value="" disabled>Update status…</option>
+            {transitions.map(t => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {app.authorized_at && (
         <div className="flex items-center gap-1 mt-2 text-[11px] text-[#8E8E93]">
           <Clock className="h-3 w-3" />
@@ -110,19 +162,21 @@ function AppCard({
 }
 
 function KanbanColumn({
-  status,
+  columnId,
   label,
   accent,
   apps,
   onReject,
   onCardClick,
+  onStatusChange,
 }: {
-  status: string
+  columnId: string
   label: string
   accent: string
   apps: Application[]
   onReject: (id: number) => void
   onCardClick: (app: Application) => void
+  onStatusChange: (id: number, status: string) => void
 }) {
   return (
     <div
@@ -152,8 +206,9 @@ function KanbanColumn({
               <AppCard
                 key={app.id}
                 app={app}
-                onReject={status === "pending_human_review" ? () => onReject(app.id) : undefined}
+                onReject={columnId === "pending_human_review" ? () => onReject(app.id) : undefined}
                 onClick={() => onCardClick(app)}
+                onStatusChange={(s) => onStatusChange(app.id, s)}
               />
             ))}
           </AnimatePresence>
@@ -171,9 +226,19 @@ export default function ApplicationsPage() {
 
   const fetchApplications = useCallback(async () => {
     try {
+      // Fetch all relevant statuses (interview column covers two statuses)
+      const fetchStatuses = [
+        "pending_human_review",
+        "cv_generating",
+        "applied",
+        "submitted_ambiguous",
+        "interview_scheduled",
+        "interviewed",
+        "offered",
+        "rejected",
+      ]
       const results: Application[] = []
-      const statuses = COLUMNS.map(c => c.status)
-      const fetches = statuses.map(s =>
+      const fetches = fetchStatuses.map(s =>
         api.getApplications({ status: s }).catch(() => ({ items: [], next_cursor: null }))
       )
       const responses = await Promise.all(fetches)
@@ -186,13 +251,13 @@ export default function ApplicationsPage() {
 
   useEffect(() => {
     fetchApplications()
-    // SSE: listen for review_ready events to refresh
     const closeSSE = createSSEConnection((event) => {
       if (
         event === "review_ready" ||
         event === "application_authorized" ||
         event === "application_rejected" ||
-        event === "application_submitted"
+        event === "application_submitted" ||
+        event === "application_status_updated"
       ) {
         fetchApplications()
       }
@@ -235,8 +300,31 @@ export default function ApplicationsPage() {
     router.push(`/review?id=${app.id}`)
   }
 
-  const getColumnApps = (status: string) =>
-    applications.filter(a => a.status === status)
+  const handleStatusChange = async (id: number, newStatus: string) => {
+    // Optimistic update
+    setApplications(prev =>
+      prev.map(a => a.id === id ? { ...a, status: newStatus as Application["status"] } : a)
+    )
+    try {
+      await api.updateApplicationStatus(id, newStatus)
+      playSuccess()
+      toast.success("Status updated")
+    } catch {
+      playError()
+      toast.error("Failed to update status")
+      fetchApplications()
+    }
+  }
+
+  const getColumnApps = (columnId: string) => {
+    if (columnId === "applied") {
+      return applications.filter(a => a.status === "applied" || a.status === "submitted_ambiguous")
+    }
+    if (columnId === "interview") {
+      return applications.filter(a => a.status === "interview_scheduled" || a.status === "interviewed")
+    }
+    return applications.filter(a => a.status === columnId)
+  }
 
   const totalPending = applications.filter(a => a.status === "pending_human_review").length
 
@@ -265,20 +353,21 @@ export default function ApplicationsPage() {
       {loading ? (
         <div className="flex gap-3 overflow-x-auto pb-4">
           {COLUMNS.map(col => (
-            <div key={col.status} className="min-w-[240px] max-w-[300px] bg-white/5 rounded-2xl h-64 animate-pulse flex-shrink-0" />
+            <div key={col.id} className="min-w-[240px] max-w-[300px] bg-white/5 rounded-2xl h-64 animate-pulse flex-shrink-0" />
           ))}
         </div>
       ) : (
         <div className="flex gap-3 overflow-x-auto pb-4">
           {COLUMNS.map(col => (
             <KanbanColumn
-              key={col.status}
-              status={col.status}
+              key={col.id}
+              columnId={col.id}
               label={col.label}
               accent={col.accent}
-              apps={getColumnApps(col.status)}
+              apps={getColumnApps(col.id)}
               onReject={handleReject}
               onCardClick={handleCardClick}
+              onStatusChange={handleStatusChange}
             />
           ))}
         </div>

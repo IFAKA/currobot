@@ -57,6 +57,11 @@ export const api = {
   completeSetup: () => request<{ status: string }>("/api/setup/complete", { method: "POST" }),
   checkOllama: () => request<{ installed: boolean; running: boolean }>("/api/setup/ollama-check"),
   startOllama: () => request<{ status: string }>("/api/setup/start-ollama", { method: "POST" }),
+  updateApplicationStatus: (id: number, status: string) =>
+    request<{ status: string; application_id: number }>(`/api/applications/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
 }
 
 export function createSSEConnection(
@@ -75,6 +80,7 @@ export function createSSEConnection(
     "application_submitted",
     "application_authorized",
     "application_rejected",
+    "application_status_updated",
   ]
   events.forEach(evt => es.addEventListener(evt, handler as EventListener))
   return () => es.close()

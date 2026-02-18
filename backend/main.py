@@ -310,6 +310,53 @@ async def reject_application(
     return {"status": "withdrawn", "application_id": app_id}
 
 
+_MANUAL_STATUS_TARGETS = {
+    "acknowledged",
+    "interview_scheduled",
+    "interviewed",
+    "offered",
+    "rejected",
+    "withdrawn",
+}
+
+
+class StatusUpdateBody(dict):
+    pass
+
+
+@app.patch("/api/applications/{app_id}/status")
+async def update_application_status(
+    app_id: int,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually update an application status to a post-submission state."""
+    from backend.database.crud import get_application, transition_application
+    from backend.database.models import ApplicationStatus
+
+    new_status = body.get("status")
+    if new_status not in _MANUAL_STATUS_TARGETS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status '{new_status}'. Allowed: {sorted(_MANUAL_STATUS_TARGETS)}",
+        )
+
+    app_obj = await get_application(db, app_id)
+    if not app_obj:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    app_obj = await transition_application(
+        db, app_obj, ApplicationStatus(new_status),
+        triggered_by="human",
+        note=f"Manual status update to {new_status}",
+    )
+    await sse_hub.broadcast("application_status_updated", {
+        "application_id": app_id,
+        "status": new_status,
+    })
+    return {"status": new_status, "application_id": app_id}
+
+
 # ---------------------------------------------------------------------------
 # Scrapers
 # ---------------------------------------------------------------------------
