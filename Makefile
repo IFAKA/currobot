@@ -10,6 +10,8 @@
 # Requirements:
 #   Python 3.11+, Node.js 20+, Rust 1.70+, Ollama
 
+SHELL := /bin/bash
+
 .PHONY: dev tauri-dev build build-backend build-frontend clean
 
 # ── Development ─────────────────────────────────────────────────────────────
