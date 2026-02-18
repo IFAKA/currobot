@@ -1,95 +1,150 @@
-# Builds and publishes installers when a version tag is pushed.
-# Usage: git tag v0.1.0 && git push origin v0.1.0
+# Builds and publishes installers automatically when commits matching conventional
+# commit prefixes land on main, OR when a version tag is pushed manually.
+#
+# Automatic trigger rules:
+#   feat: …   → bumps MINOR version  (0.1.x → 0.2.0)
+#   fix:  …   → bumps PATCH version  (0.1.0 → 0.1.1)
+#   release: … → bumps PATCH version
+#
+# Multiple commits pushed at once: only the HEAD commit message is evaluated.
+# Concurrency: if a second push arrives while a build is running, the running
+# build is cancelled and the newer push wins.
+#
+# Manual trigger: git tag v1.2.3 && git push origin v1.2.3
 #
 # Produces:
-#   macOS  — .dmg (unsigned — user must right-click → Open on first launch)
-#   Windows — .msi (unsigned — Windows may show SmartScreen on first launch)
-#
-# Architecture strategy:
-#   macOS arm64 (Apple Silicon / M-series):
-#     - Runner: macos-latest (arm64 runner since late 2024)
-#     - Rust target: aarch64-apple-darwin (native compile, no cross)
-#     - PyInstaller: runs natively on arm64, produces arm64 binary
-#     - tauri.conf.json sets signingIdentity: "-" (ad-hoc) so the unsigned
-#       aarch64 .app doesn't show "app is damaged" on first launch
-#
-#   macOS x86_64 (Intel):
-#     - Runner: macos-13 (last Intel runner)
-#     - Rust target: x86_64-apple-darwin (native compile)
-#     - PyInstaller: runs natively on x86_64
-#
-#   Windows x64:
-#     - Runner: windows-latest
-#     - GTK3/Pango/Cairo via MSYS2 (required for WeasyPrint at build time)
-#
-# Why NOT universal-apple-darwin:
-#   PyInstaller cannot cross-compile a Python binary for a different arch.
-#   A "universal2" sidecar requires ALL Python C extensions to ship universal2
-#   wheels, which weasyprint's deps (pango/cairo bindings) do not.  The clean
-#   approach is two separate native builds — each DMG only runs on its own arch,
-#   which is fine for open-source / unsigned distribution.
-#
-# To enable proper code signing, add secrets:
-#   macOS:   APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
-#            APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID
-#   Windows: TAURI_PRIVATE_KEY, TAURI_KEY_PASSWORD
+#   macOS arm64 — .dmg (ad-hoc signed)
+#   Windows x64 — .msi
 
 name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
+    tags: ['v*']
 
 permissions:
-  contents: write   # required by tauri-action to create releases and upload assets
+  contents: write
+
+# Cancel any in-progress build for the same ref so rapid pushes don't queue up
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  # ── Step 1: decide whether to release and bump the version ─────────────────
+  # Runs only on branch pushes (tag pushes go straight to build).
+  # Skips commits made by the bot itself ([skip ci]) to prevent loops.
+  prepare:
+    if: |
+      github.ref_type == 'branch' &&
+      !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      new_version:    ${{ steps.bump.outputs.new_version }}
+      sha:            ${{ steps.push.outputs.sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Check commit message
+        id: check
+        run: |
+          MSG="${{ github.event.head_commit.message }}"
+          echo "HEAD commit: $MSG"
+          if [[ "$MSG" == feat:* ]] || [[ "$MSG" == fix:* ]] || [[ "$MSG" == release:* ]]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            if [[ "$MSG" == feat:* ]]; then
+              echo "bump=minor" >> $GITHUB_OUTPUT
+            else
+              echo "bump=patch" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Bump version in tauri.conf.json and package.json
+        id: bump
+        if: steps.check.outputs.should_release == 'true'
+        run: |
+          VERSION=$(jq -r '.version' frontend/src-tauri/tauri.conf.json)
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+
+          if [ "${{ steps.check.outputs.bump }}" = "minor" ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+
+          NEW="$MAJOR.$MINOR.$PATCH"
+          echo "Bumping $VERSION → $NEW"
+          echo "new_version=$NEW" >> $GITHUB_OUTPUT
+
+          jq --arg v "$NEW" '.version = $v' frontend/src-tauri/tauri.conf.json \
+            > /tmp/tauri.conf.json && mv /tmp/tauri.conf.json frontend/src-tauri/tauri.conf.json
+
+          jq --arg v "$NEW" '.version = $v' frontend/package.json \
+            > /tmp/package.json && mv /tmp/package.json frontend/package.json
+
+      - name: Commit version bump and push
+        id: push
+        if: steps.check.outputs.should_release == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src-tauri/tauri.conf.json frontend/package.json
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.new_version }} [skip ci]"
+          git push origin main
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+  # ── Step 2: build installers ───────────────────────────────────────────────
   build:
+    needs: prepare
+    # Run when:
+    #   a) triggered by a tag push (manual release), OR
+    #   b) prepare decided to release (auto release from branch push)
+    if: |
+      always() && (
+        github.ref_type == 'tag' ||
+        (needs.prepare.result == 'success' && needs.prepare.outputs.should_release == 'true')
+      )
     strategy:
       fail-fast: false
       matrix:
         include:
-          # ── macOS Apple Silicon (arm64) ─────────────────────────────────────
-          # macos-latest is now an arm64 runner (M-series), available since
-          # GitHub made it the default in late 2024.
           - os: macos-latest
             rust-target: aarch64-apple-darwin
             label: macos-arm64
-
-          # ── Windows x64 ─────────────────────────────────────────────────────
           - os: windows-latest
-            rust-target: ''       # empty → Rust default (x86_64-pc-windows-msvc)
+            rust-target: ''
             label: windows-x64
 
     runs-on: ${{ matrix.os }}
     name: Build (${{ matrix.label }})
 
     steps:
-      # ── Checkout ─────────────────────────────────────────────────────────────
-
+      # Checkout the version-bumped commit on branch builds; HEAD on tag builds
       - uses: actions/checkout@v4
-
-      # ── Node.js ──────────────────────────────────────────────────────────────
-      # cache-dependency-path scoped to the frontend subdirectory so npm's
-      # cache key reflects only the frontend lock file.
+        with:
+          ref: ${{ github.ref_type == 'branch' && needs.prepare.outputs.sha || github.ref }}
 
       - name: Set up Node 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      # ── Python ───────────────────────────────────────────────────────────────
-
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: pip
-
-      # ── Rust ─────────────────────────────────────────────────────────────────
-      # Install the stable toolchain.  On macOS we only need the one native
-      # target; on Windows the default target is used (no --target flag needed).
 
       - name: Set up Rust (stable)
         uses: dtolnay/rust-toolchain@stable
@@ -101,19 +156,10 @@ jobs:
         with:
           workspaces: frontend/src-tauri
 
-      # ── System deps for WeasyPrint ───────────────────────────────────────────
-      # WeasyPrint requires Pango, Cairo and GDK-PixBuf at build time so that
-      # PyInstaller can collect the native shared libraries into the binary.
-
       - name: Install WeasyPrint system deps (macOS)
         if: runner.os == 'macOS'
-        run: |
-          brew install pango cairo gdk-pixbuf gobject-introspection libffi
+        run: brew install pango cairo gdk-pixbuf gobject-introspection libffi
 
-      # MSYS2 provides the MinGW-w64 Pango/Cairo stack for Windows.
-      # msys2/setup-msys2@v2 installs MSYS2 and the requested packages.
-      # We add the mingw64/bin directory to PATH so weasyprint can find the
-      # DLLs at runtime (PyInstaller collects them from there too).
       - name: Install WeasyPrint system deps via MSYS2 (Windows)
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2
@@ -132,17 +178,6 @@ jobs:
         shell: bash
         run: echo "C:/msys64/mingw64/bin" >> $GITHUB_PATH
 
-      # ── Build Python sidecar with PyInstaller ────────────────────────────────
-      # Tauri requires the sidecar to be named:
-      #   binaries/jobbot-backend-<target-triple>        (macOS/Linux)
-      #   binaries/jobbot-backend-<target-triple>.exe    (Windows)
-      #
-      # We derive the target triple from rustc because it's always correct for
-      # the current runner, and it's the same triple Tauri uses internally.
-      #
-      # PyInstaller output goes into a temporary dist/ directory; we then rename
-      # and move the binary into the correct location.
-
       - name: Install Python deps and PyInstaller
         run: |
           pip install --upgrade pip
@@ -154,27 +189,15 @@ jobs:
         run: |
           TRIPLE=$(rustc -vV | grep '^host:' | cut -d' ' -f2)
           echo "Target triple: $TRIPLE"
-
-          # Build into a scratch directory inside binaries/ to avoid polluting it
           pyinstaller backend.spec --distpath frontend/src-tauri/binaries/dist
-
           DST=frontend/src-tauri/binaries
-
-          # Rename to the Tauri-required <name>-<triple>[.exe] form
           if [ -f "$DST/dist/jobbot-backend.exe" ]; then
             mv "$DST/dist/jobbot-backend.exe" "$DST/jobbot-backend-${TRIPLE}.exe"
           else
             mv "$DST/dist/jobbot-backend" "$DST/jobbot-backend-${TRIPLE}"
           fi
-
-          echo "Sidecar placed at: $DST/jobbot-backend-${TRIPLE}"
+          echo "Sidecar: $DST/jobbot-backend-${TRIPLE}"
           ls -lh "$DST/"
-
-      # ── Install frontend dependencies ────────────────────────────────────────
-      # Must run BEFORE tauri-action so @tauri-apps/cli and its platform-specific
-      # native binding (e.g. cli-win32-x64-msvc) are present in node_modules.
-      # Use npm install (not npm ci) so npm resolves optional deps for the current
-      # platform regardless of what the lockfile was generated on.
 
       - name: Install frontend npm dependencies
         shell: bash
@@ -183,22 +206,17 @@ jobs:
           rm -rf node_modules package-lock.json
           npm install
 
-      # ── Build Tauri application ───────────────────────────────────────────────
-      # tauri-apps/tauri-action@v0 calls `npm run tauri build` inside projectPath,
-      # creates a GitHub release (using tagName), and uploads all bundle artifacts.
-      #
-      # Key inputs:
-      #   projectPath    — where tauri.conf.json lives (the frontend/ subdirectory)
-      #   tagName        — release tag; __VERSION__ is replaced by tauri-action
-      #                    with the version from tauri.conf.json
-      #   args           — passed to `tauri build`; --target selects the Rust
-      #                    target (empty string on Windows → uses host default)
-      #   releaseDraft   — publish as draft so you can review before making public
-      #
-      # APPLE_SIGNING_IDENTITY / TAURI_PRIVATE_KEY are intentionally left out;
-      # without them Tauri produces unsigned bundles.  On macOS arm64, Tauri
-      # automatically performs ad-hoc signing ("-") to prevent the "app is
-      # damaged" Gatekeeper dialog on unsigned aarch64 .app bundles.
+      # Resolve the release tag: for branch builds use the bumped version;
+      # for manual tag builds use the pushed tag as-is.
+      - name: Resolve release tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=v${{ needs.prepare.outputs.new_version }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Build and release with tauri-action
         uses: tauri-apps/tauri-action@v0
@@ -206,15 +224,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: frontend
-          tagName: v__VERSION__
-          releaseName: 'currobot v__VERSION__'
+          tagName:     ${{ steps.tag.outputs.tag }}
+          releaseName: 'currobot ${{ steps.tag.outputs.tag }}'
           releaseBody: |
             ## Install
 
             | Platform | Download |
             |---|---|
-            | macOS Apple Silicon (M1 +) | `currobot_*_aarch64.dmg` |
-            | macOS Intel | `currobot_*_x64.dmg` |
+            | macOS Apple Silicon (M1+) | `currobot_*_aarch64.dmg` |
             | Windows | `currobot_*_x64-setup.msi` |
 
             ### First-launch notes
